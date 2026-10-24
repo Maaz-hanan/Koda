@@ -5,9 +5,14 @@ import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart' hide LoopMode;
 
 import '../../core/storage_paths.dart';
+import '../../data/database/app_database.dart';
+import '../../data/database/loop_profile_dao.dart';
+import '../../data/models/loop_profile.dart';
 import '../../data/models/song.dart';
+import '../../data/repositories/loop_profile_repository.dart';
 import '../../data/services/playback_persistence.dart';
 import '../loop/loop_mode.dart';
+import '../loop/section_loop_engine.dart';
 import '../loop/whole_song_repeat.dart';
 import 'playback_restore.dart';
 import 'queue_manager.dart';
@@ -19,20 +24,32 @@ import 'queue_manager.dart';
 /// (play, pause, skipToNext, ...) through audio_service. So the "Next"
 /// rules we write here apply to every source automatically.
 ///
-/// Whole-song repeat (Phase 2) plugs into [_onTrackCompleted] and the
-/// track-changing commands; section loops (Phase 3) will use the same spots.
+/// Whole-song repeat (Phase 2) and custom section looping (Phase 3)
+/// plug into position updates, track completion, and track-changing commands.
 class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
-  LoopPlayerAudioHandler({PlaybackPersistence? persistence})
-      : _persistence = persistence ?? PlaybackPersistence() {
+  LoopPlayerAudioHandler({
+    PlaybackPersistence? persistence,
+    LoopProfileRepository? loopProfiles,
+  })  : _persistence = persistence ?? PlaybackPersistence(),
+        _loopProfiles = loopProfiles ??
+            LoopProfileRepository(LoopProfileDao(AppDatabase.instance)) {
     _ready = _init();
   }
 
   final PlaybackPersistence _persistence;
+  final LoopProfileRepository _loopProfiles;
   final AudioPlayer _player = AudioPlayer();
   final QueueManager _queueManager = QueueManager();
 
   /// Decides what happens at the end of a song (Off / Once / Infinite).
   final WholeSongRepeat _repeat = WholeSongRepeat();
+
+  /// Manages custom finite/infinite section loops. [PRD FR-014..FR-025]
+  final SectionLoopEngine _sectionLoop = SectionLoopEngine();
+
+  /// Active loop mode (whole song or section loop).
+  LoopMode _currentMode = LoopMode.off;
+
   final StreamController<LoopMode> _repeatChanges =
       StreamController<LoopMode>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
@@ -49,22 +66,33 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   /// player may still be showing the PREVIOUS song's position.
   int _loadedGeneration = -1;
 
-  /// The current whole-song repeat mode, and a stream of changes to it.
-  LoopMode get repeatMode => _repeat.mode;
+  /// The current repeat / loop mode, and a stream of changes to it.
+  LoopMode get repeatMode => _currentMode;
   Stream<LoopMode> get repeatModeStream => _repeatChanges.stream;
 
-  /// Short tap on the Loop button: Off -> Once -> Infinite -> Off.
-  void cycleRepeatMode() {
-    _repeat.cycle();
-    _repeatChanges.add(_repeat.mode);
+  void _setMode(LoopMode mode) {
+    if (_currentMode != mode) {
+      _currentMode = mode;
+      _repeatChanges.add(_currentMode);
+    }
   }
 
-  /// A different song is about to play, so whole-song repeat ends.
+  /// Short tap on the Loop button:
+  /// If in a section loop -> switches to Off (cancels active session; keeps saved profile).
+  /// Otherwise cycles Off -> Once -> Infinite -> Off. [PRD §3.1, PLAN §4.2]
+  void cycleRepeatMode() {
+    final next = nextRepeatMode(_currentMode);
+    _sectionLoop.cancelSession();
+    _repeat.setMode(next);
+    _setMode(next);
+  }
+
+  /// A different song is about to play, so whole-song repeat and section loop end.
   /// Call this BEFORE any await, so nothing stale can fire in between.
   void _endRepeat() {
-    final before = _repeat.mode;
     _repeat.onTrackChange();
-    if (before != _repeat.mode) _repeatChanges.add(_repeat.mode);
+    _sectionLoop.cancelSession();
+    _setMode(LoopMode.off);
   }
 
   /// Human-readable playback problems (e.g. a damaged file) for the UI.
@@ -89,6 +117,9 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
       }
     });
 
+    // Section loop engine monitors position to seek back at loopEnd.
+    _player.positionStream.listen(_onPositionChanged);
+
     // Remember where we are whenever playback pauses...
     _player.playingStream.listen((playing) {
       if (!playing) unawaited(saveNow());
@@ -98,6 +129,32 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     Timer.periodic(const Duration(seconds: 5), (_) {
       if (_player.playing) unawaited(saveNow());
     });
+  }
+
+  void _onPositionChanged(Duration position) {
+    if (_queueManager.current == null || _loadedGeneration != _generation) {
+      return;
+    }
+
+    final action =
+        _sectionLoop.onPosition(position.inMilliseconds, _generation);
+    switch (action) {
+      case SectionLoopAction.seekToStart:
+        final session = _sectionLoop.session;
+        if (session != null) {
+          unawaited(_player.seek(Duration(milliseconds: session.loopStartMs)));
+        }
+        break;
+      case SectionLoopAction.loopCompleted:
+        final session = _sectionLoop.session;
+        _setMode(LoopMode.off);
+        if (session != null) {
+          unawaited(_player.seek(Duration(milliseconds: session.loopEndMs)));
+        }
+        break;
+      case SectionLoopAction.none:
+        break;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -111,6 +168,38 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     _queueManager.setQueue(songs, startIndex);
     queue.add(songs.map(_toMediaItem).toList());
     await _loadCurrentAndPlay();
+  }
+
+  /// Applies a newly saved or updated loop profile immediately if it belongs
+  /// to the currently playing song. [PLAN §4.2]
+  Future<void> applyLoopProfile(LoopProfile profile) async {
+    final song = _queueManager.current;
+    if (song == null || song.id != profile.songId) return;
+
+    // Clear any active whole-song repeat
+    _repeat.setMode(LoopMode.off);
+
+    final durationMs = _player.duration?.inMilliseconds ?? song.durationMs;
+    if (profile.isSectionMode &&
+        profile.validate(durationMs: durationMs) == null) {
+      _sectionLoop.startSession(
+        loopStartMs: profile.loopStartMs!,
+        loopEndMs: profile.loopEndMs!,
+        isFinite: profile.mode == LoopMode.finiteSection,
+        finiteCount: profile.finiteCount ?? 1,
+        trackGeneration: _generation,
+      );
+      _setMode(profile.mode);
+
+      // If current position is outside the loop region, jump into it
+      final currentMs = _player.position.inMilliseconds;
+      if (currentMs < profile.loopStartMs! || currentMs >= profile.loopEndMs!) {
+        await _player.seek(Duration(milliseconds: profile.loopStartMs!));
+      }
+    } else {
+      _sectionLoop.cancelSession();
+      _setMode(LoopMode.off);
+    }
   }
 
   /// Saves the queue, current song and position. [PRD FR-011]
@@ -187,12 +276,21 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> pause() => _player.pause();
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) async {
+    _sectionLoop.onManualSeek(position.inMilliseconds);
+    if (!_sectionLoop.hasActiveSession &&
+        (_currentMode == LoopMode.finiteSection ||
+            _currentMode == LoopMode.infiniteSection)) {
+      _setMode(LoopMode.off);
+    }
+    return _player.seek(position);
+  }
 
   @override
   Future<void> skipToNext() async {
     if (_queueManager.current == null) return;
-    // Next always wins over any repeat. [PRD FR-022, §13 rule 1]
+    // Next always wins over every repeat or section-loop transition.
+    // [PRD FR-017, FR-022, §13 rule 1]
     _endRepeat();
     if (_queueManager.moveToNext()) {
       await _loadCurrentAndPlay();
@@ -207,6 +305,12 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     // Like most players: if we're a few seconds in, restart the song first.
     if (_player.position > const Duration(seconds: 3) ||
         !_queueManager.hasPrevious) {
+      _sectionLoop.onManualSeek(0);
+      if (!_sectionLoop.hasActiveSession &&
+          (_currentMode == LoopMode.finiteSection ||
+              _currentMode == LoopMode.infiniteSection)) {
+        _setMode(LoopMode.off);
+      }
       await _player.seek(Duration.zero);
       return;
     }
@@ -234,6 +338,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     if (song == null) return;
 
     final generation = ++_generation;
+    _endRepeat();
     mediaItem.add(_toMediaItem(song));
 
     try {
@@ -251,6 +356,31 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
         }
       }
       _loadedGeneration = generation;
+
+      // Restore saved loop profile for this song [PRD FR-018, FR-019]
+      final profile = await _loopProfiles.getProfile(song.id);
+      if (generation != _generation) return;
+
+      final effectiveDurationMs = duration?.inMilliseconds ?? song.durationMs;
+      if (profile.isSectionMode &&
+          profile.validate(durationMs: effectiveDurationMs) == null) {
+        _sectionLoop.startSession(
+          loopStartMs: profile.loopStartMs!,
+          loopEndMs: profile.loopEndMs!,
+          isFinite: profile.mode == LoopMode.finiteSection,
+          finiteCount: profile.finiteCount ?? 1,
+          trackGeneration: generation,
+        );
+        _setMode(profile.mode);
+
+        if (initialPosition == Duration.zero && profile.loopStartMs! > 0) {
+          await _player.seek(Duration(milliseconds: profile.loopStartMs!));
+          if (generation != _generation) return;
+        }
+      } else {
+        _setMode(LoopMode.off);
+      }
+
       await saveNow();
       if (autoPlay) unawaited(_player.play());
     } catch (_) {
@@ -268,9 +398,32 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
       return;
     }
 
-    final before = _repeat.mode;
+    // 1. If section loop is active, let it handle the completion
+    if (_sectionLoop.hasActiveSession) {
+      final action = _sectionLoop.onSongCompleted(_generation);
+      if (action == SectionLoopAction.seekToStart) {
+        final session = _sectionLoop.session;
+        if (session != null) {
+          final generation = _generation;
+          await _player.seek(Duration(milliseconds: session.loopStartMs));
+          if (generation != _generation) return; // something newer took over
+          unawaited(_player.play());
+          return;
+        }
+      } else if (action == SectionLoopAction.loopCompleted) {
+        _setMode(LoopMode.off);
+        if (_queueManager.moveToNext()) {
+          await _loadCurrentAndPlay();
+        } else {
+          await _finishQueue();
+        }
+        return;
+      }
+    }
+
+    // 2. Otherwise whole-song repeat decides
     final action = _repeat.onSongCompleted();
-    if (before != _repeat.mode) _repeatChanges.add(_repeat.mode);
+    _setMode(_repeat.mode);
 
     if (action == CompletionAction.replay) {
       final generation = _generation;
@@ -296,6 +449,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
 
   Future<void> _resetToIdle() async {
     _generation++;
+    _endRepeat();
     await _player.stop();
     _queueManager.clearCurrent();
     mediaItem.add(null);

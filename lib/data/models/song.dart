@@ -32,11 +32,11 @@ class Song {
   final int durationMs;
 
   /// Path of the artwork file RELATIVE to the app Documents folder
-  /// (e.g. "artwork/<id>.jpg"), or null. Use `song.absoluteArtworkPath`.
+  /// (e.g. `artwork/<id>.jpg`), or null. Use `song.absoluteArtworkPath`.
   final String? artworkPath;
 
   /// Path of the audio file RELATIVE to the app Documents folder
-  /// (e.g. "music/<id>.mp3"). Use `song.absoluteFilePath` to read it.
+  /// (e.g. `music/<id>.mp3`). Use `song.absoluteFilePath` to read it.
   final String filePath;
 
   /// Unix epoch timestamp (ms) when the file was imported.

@@ -75,6 +75,10 @@ I edit code in VS Code. Xcode is only for building/signing.
   (real iPhone, all pass). Logic in lib/domain/loop/whole_song_repeat.dart.
 - Phase 3-1: Custom Loop editor + saved per-song loop profiles
   (lib/presentation/now_playing/loop_editor_sheet.dart). STATUS: <tested>
+- Phase 3-2: Section loop engine (ActiveLoopSession, SectionLoopEngine,
+  audio_handler integration, finite N plays then continue from loop end,
+  infinite until Next/mode change, Next priority, stale event suppression,
+  seek outside cancels loop, 70/70 unit tests pass). STATUS: <tested>
 
 ## Key decisions / gotchas (add)
 - just_audio exports its own `LoopMode`. audio_handler.dart imports it with
@@ -86,9 +90,8 @@ I edit code in VS Code. Xcode is only for building/signing.
   exact Terminal commands. I run flutter analyze / flutter test and paste results.
 
 ## Next steps
-1. Phase 3-2: section loop ENGINE. Make audio follow the saved profile
-   (finite N plays then continue from loop end; infinite until Next/mode change).
-   Next from the app, lock screen, Control Centre, headphones must always exit
-   an infinite loop (skipToNext in audio_handler.dart). Stale position events
-   must be ignored. See LoopPlayer_Plan.md Phase 3 and PRD FR-014..FR-025, §13.
-2. Phase 4 waveform editor, Phase 5 Auto Loop, Phase 6 polish, Phase 7 regression.
+1. Phase 4: Waveform editor (waveform display, draggable start/end handles,
+   precision adjustment, preview).
+2. Phase 5: Auto Loop candidate analysis and selection.
+3. Phase 6: Polish and lock-screen/system integration hardening.
+4. Phase 7: Regression and performance testing.

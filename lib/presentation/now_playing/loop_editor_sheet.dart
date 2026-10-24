@@ -136,6 +136,11 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
     });
     try {
       await ref.read(loopProfileRepositoryProvider).saveProfile(profile);
+      try {
+        await ref.read(audioHandlerProvider).applyLoopProfile(profile);
+      } catch (_) {
+        // Safe fallback in environments/tests without audioHandlerProvider.
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
