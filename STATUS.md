@@ -191,38 +191,6 @@ Retested on the iPhone: owner reports "everything seems to be working".
   it) may end a preview immediately; the waveform needs a song that
   just_waveform can decode (error + Retry otherwise).
 
-## Phase 5 — Auto Loop (IN PROGRESS)
-- 5-1 analyzer: written by Claude; owner reports `flutter test` ALL PASSED (test
-  count, `flutter analyze` and an app regression check not reported yet:
-  <CONFIRM>). Not tuned on real songs. Pure Dart, no new package, uses the cached
-  waveform (one loudness value per 10 ms). No Dart/Flutter was available when it
-  was written; the algorithm was first checked with a Python prototype on
-  synthetic songs.
-  Files: lib/domain/autoloop/auto_loop_config.dart (styles Exact / Beat-aligned /
-  Energy, AutoLoopSettings with JSON for the existing autoLoopPrefsJson column,
-  ALL tuning numbers in AutoLoopTuning), auto_loop_result.dart,
-  auto_loop_analyzer.dart (AutoLoopAnalyzer.analyze + top-level
-  runAutoLoopAnalysis), test/auto_loop_analyzer_test.dart.
-  Defaults: target 20 s, allowed 5 s to 60 s. Honest limits: loudness only (no
-  pitch), beat positions are estimates, constants are NOT tuned on real music.
-- 5-2 background run: WRITTEN BY CLAUDE, **NOT YET RUN OR TESTED BY OWNER**. Reads
-  the cached waveform, then runs the analysis with Flutter's compute() (verified:
-  `compute(topLevelFn, message)` from package:flutter/foundation.dart; no new
-  package). Never writes to the database. Nothing in the UI uses it yet.
-  Files: lib/domain/autoloop/auto_loop_runner.dart (AutoLoopRunner interface,
-  AutoLoopStage, AutoLoopException), lib/data/services/auto_loop_service.dart,
-  lib/providers/auto_loop_provider.dart (autoLoopRunnerProvider; tests override
-  it with a fake), test/auto_loop_service_test.dart (includes one test that uses
-  a REAL isolate).
-  "Ran fine but no good loop" is a normal AutoLoopResult (found == false with a
-  failure reason); AutoLoopException means a real error (song/waveform unreadable,
-  analysis crashed) and its message is safe to show.
-- <CONFIRM: `flutter test` and `flutter analyze` results for 5-2>
-- Still to do: 5-3 Auto Loop panel in
-  the loop editor (target, style, loading/success/failure/Retry, handles pre-set,
-  "Replace existing loop?" confirmation, nothing saved until Save); 5-4 tuning on
-  real songs from the owner's feedback.
-
 ## Tested
 - Phase 4-1, 4-2, 4-3 on the iPhone: owner reports everything works.
 - AFTER that, the 2 s lead-in was removed from Preview (preview_session.dart,
@@ -234,7 +202,7 @@ Retested on the iPhone: owner reports "everything seems to be working".
 - <CONFIRM: real `flutter test` pass count and `flutter analyze` result>.
 
 ## Next steps
-1. Phase 5 Auto Loop, steps 5-2..5-4 remain (see Phase 5 section) (PRD FR-033..FR-039, LoopPlayer_Plan.md Phase 5): target
+1. Phase 5 Auto Loop (PRD FR-033..FR-039, LoopPlayer_Plan.md Phase 5): target
    duration, candidate analysis, preview + adjustable handles (reuse the Phase 4
    editor), never overwrite a saved loop without confirmation, honest "no good
    candidate" result, loading/failure states with retry. It may need an audio
