@@ -7,15 +7,18 @@ import '../../core/format_duration.dart';
 import '../../core/loop_time.dart';
 import '../../data/models/loop_profile.dart';
 import '../../domain/loop/loop_mode.dart';
+import '../../domain/waveform/waveform_peaks.dart';
 import '../../providers/audio_handler_provider.dart';
 import '../../providers/repository_providers.dart';
+import '../../providers/waveform_provider.dart';
+import 'waveform_view.dart';
 
 /// The Custom Loop Editor. [PRD §3.2, FR-014..FR-016, FR-018, FR-024]
 ///
-/// Opened by a long press on the Loop button. Phase 3-1: it lets you pick
-/// Off / Finite / Infinite, a start, an end and a play count, and it SAVES
-/// that per song. (Phase 3-2 makes the audio actually follow it; Phase 4 adds
-/// the waveform.)
+/// Opened by a long press on the Loop button. Pick Off / Finite / Infinite,
+/// a start, an end and a play count; it is SAVED per song. The loop does not
+/// move playback: it starts by itself when the song reaches Start.
+/// (Phase 4 adds the waveform.)
 ///
 /// Cancel and swipe-down never write anything, so the previous saved loop is
 /// untouched. Edits live only in this widget until you press Save.
@@ -60,10 +63,48 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
   bool _saving = false;
   String? _error;
 
+  // Waveform (Phase 4-1)
+  WaveformPeaks? _peaks;
+  double _waveProgress = 0;
+  bool _waveLoading = true;
+  String? _waveError;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadWaveform(resetState: false); // fields already start in "loading"
+  }
+
+  /// Builds (or reads from cache) the waveform. The form works without it:
+  /// if this fails you can still type the times.
+  Future<void> _loadWaveform({bool resetState = true}) async {
+    if (resetState) {
+      setState(() {
+        _waveLoading = true;
+        _waveError = null;
+        _waveProgress = 0;
+      });
+    }
+    try {
+      final peaks = await ref.read(waveformLoaderProvider).load(
+        widget.songId,
+        onProgress: (p) {
+          if (mounted) setState(() => _waveProgress = p);
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _peaks = peaks;
+        _waveLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _waveLoading = false;
+        _waveError = e.toString();
+      });
+    }
   }
 
   @override
@@ -136,12 +177,6 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
     });
     try {
       await ref.read(loopProfileRepositoryProvider).saveProfile(profile);
-      try {
-        await ref.read(audioHandlerProvider).applyLoopProfile(profile);
-      } catch (_) {
-        // Safe fallback in environments/tests without audioHandlerProvider.
-      }
-      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -149,7 +184,22 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
           _error = 'Could not save the loop: $e';
         });
       }
+      return;
     }
+
+    // Saved. Now tell the player about it (no silent failures).
+    try {
+      await ref.read(loopProfileApplierProvider)(profile);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = 'Saved, but the loop could not be applied to this song: $e';
+        });
+      }
+      return;
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -197,6 +247,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                     }),
                   ),
                   const SizedBox(height: 16),
+                  _waveformBlock(scheme),
+                  const SizedBox(height: 16),
                   _timeField(
                     fieldKey: const Key('loop_start_field'),
                     controller: _startController,
@@ -208,6 +260,14 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                     controller: _endController,
                     label: 'End',
                   ),
+                  if (_mode != LoopMode.off) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'The loop starts by itself when the song reaches Start.',
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant),
+                    ),
+                  ],
                   if (_mode == LoopMode.finiteSection) ...[
                     const SizedBox(height: 12),
                     Row(
@@ -269,6 +329,74 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
     );
   }
 
+  /// The waveform with the chosen region highlighted and a moving playhead.
+  Widget _waveformBlock(ColorScheme scheme) {
+    if (_waveLoading) {
+      return SizedBox(
+        height: 96,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            LinearProgressIndicator(value: _waveProgress > 0 ? _waveProgress : null),
+            const SizedBox(height: 8),
+            Text('Preparing waveform…',
+                style: TextStyle(color: scheme.onSurfaceVariant)),
+          ],
+        ),
+      );
+    }
+
+    final peaks = _peaks;
+    if (peaks == null) {
+      return Container(
+        key: const Key('waveform_error'),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${_waveError ?? "No waveform."} You can still type the times.',
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+            ),
+            TextButton(
+              key: const Key('waveform_retry'),
+              onPressed: _loadWaveform,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Highlight the region only while a section loop is selected and valid.
+    final isSection =
+        _mode == LoopMode.finiteSection || _mode == LoopMode.infiniteSection;
+    final start = isSection ? parseLoopTime(_startController.text) : null;
+    final end = isSection ? parseLoopTime(_endController.text) : null;
+
+    return Consumer(
+      builder: (context, ref, _) {
+        final positionMs = ref.watch(positionProvider).when(
+              data: (p) => p.inMilliseconds,
+              loading: () => null,
+              error: (e, s) => null,
+            );
+        return WaveformView(
+          peaks: peaks,
+          totalMs: widget.durationMs,
+          startMs: start,
+          endMs: end,
+          positionMs: positionMs,
+        );
+      },
+    );
+  }
+
   Widget _timeField({
     required Key fieldKey,
     required TextEditingController controller,
@@ -287,9 +415,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
               hintText: 'm:ss  (e.g. 1:05)',
               border: const OutlineInputBorder(),
             ),
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
+            onChanged: (_) => setState(() => _error = null),
           ),
         ),
         const SizedBox(width: 8),

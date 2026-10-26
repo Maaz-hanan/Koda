@@ -1,6 +1,7 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/models/loop_profile.dart';
 import '../domain/loop/loop_mode.dart';
 import '../domain/playback/audio_handler.dart';
 
@@ -37,6 +38,13 @@ class RepeatModeNotifier extends Notifier<LoopMode> {
 
 final repeatModeProvider =
     NotifierProvider<RepeatModeNotifier, LoopMode>(RepeatModeNotifier.new);
+
+/// Applies a just-saved loop profile to the song that is playing.
+/// A separate provider so the editor can be tested without a real player.
+final loopProfileApplierProvider =
+    Provider<Future<void> Function(LoopProfile)>(
+  (ref) => ref.read(audioHandlerProvider).applyLoopProfile,
+);
 
 /// Playback problems to show to the user.
 final playbackErrorProvider = StreamProvider<String>(

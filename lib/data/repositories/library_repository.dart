@@ -27,6 +27,9 @@ class LibraryRepository {
     await _deleteFileQuietly(song.absoluteFilePath);
     final art = song.absoluteArtworkPath;
     if (art != null) await _deleteFileQuietly(art);
+    // Its cached waveform (if any) goes too.
+    await _deleteFileQuietly(
+        StoragePaths.resolve(StoragePaths.waveformRelativePath(song.id)));
   }
 
   Future<void> _deleteFileQuietly(String path) async {

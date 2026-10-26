@@ -4,7 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:loop_player/data/models/loop_profile.dart';
 import 'package:loop_player/data/repositories/loop_profile_repository.dart';
 import 'package:loop_player/domain/loop/loop_mode.dart';
+import 'package:loop_player/domain/waveform/waveform_loader.dart';
+import 'package:loop_player/domain/waveform/waveform_peaks.dart';
+import 'package:loop_player/presentation/now_playing/waveform_view.dart';
+import 'package:loop_player/providers/waveform_provider.dart';
 import 'package:loop_player/presentation/now_playing/loop_editor_sheet.dart';
+import 'package:loop_player/providers/audio_handler_provider.dart';
 import 'package:loop_player/providers/repository_providers.dart';
 
 /// In-memory stand-in for the database.
@@ -29,8 +34,32 @@ class _FakeRepo implements LoopProfileRepository {
   Future<void> deleteProfile(String songId) async => saved.remove(songId);
 }
 
-Widget _app(_FakeRepo repo) => ProviderScope(
-      overrides: [loopProfileRepositoryProvider.overrideWithValue(repo)],
+/// Stand-in for the waveform generator. Fails when [fail] is true.
+class _FakeLoader implements WaveformLoader {
+  _FakeLoader({this.fail = false});
+  bool fail;
+  int loadCalls = 0;
+
+  @override
+  Future<WaveformPeaks> load(String songId,
+      {void Function(double progress)? onProgress}) async {
+    loadCalls++;
+    if (fail) throw WaveformException("Couldn't read this audio file.");
+    return WaveformPeaks(
+      values: List<double>.generate(600, (i) => (i % 50) / 50),
+      peaksPerSecond: 10,
+    );
+  }
+}
+
+Widget _app(_FakeRepo repo, {_FakeLoader? loader}) => ProviderScope(
+      overrides: [
+        loopProfileRepositoryProvider.overrideWithValue(repo),
+        // No real player in tests: applying a loop does nothing here.
+        loopProfileApplierProvider.overrideWithValue((profile) async {}),
+        waveformLoaderProvider.overrideWithValue(loader ?? _FakeLoader()),
+        positionProvider.overrideWith((ref) => const Stream<Duration>.empty()),
+      ],
       child: MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
@@ -139,5 +168,47 @@ void main() {
     expect(repo.saveCalls, 0);
     expect(repo.saved, isEmpty);
     expect(find.byType(LoopEditorSheet), findsNothing);
+  });
+  testWidgets('shows the waveform once it is ready', (tester) async {
+    await tester.pumpWidget(_app(_FakeRepo()));
+    await _open(tester);
+
+    expect(find.byType(WaveformView), findsOneWidget);
+    expect(find.byKey(const Key('waveform_error')), findsNothing);
+  });
+
+  testWidgets('a failed waveform shows a message, Retry, and saving still works',
+      (tester) async {
+    final repo = _FakeRepo();
+    final loader = _FakeLoader(fail: true);
+    await tester.pumpWidget(_app(repo, loader: loader));
+    await _open(tester);
+
+    expect(find.byKey(const Key('waveform_error')), findsOneWidget);
+    expect(find.textContaining("Couldn't read this audio file."), findsOneWidget);
+    expect(find.byType(WaveformView), findsNothing);
+
+    // The form still works without a waveform.
+    await tester.enterText(find.byKey(const Key('loop_start_field')), '0:10');
+    await tester.enterText(find.byKey(const Key('loop_end_field')), '0:20');
+    await tester.tap(find.text('Infinite'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('loop_save_button')));
+    await tester.pumpAndSettle();
+    expect(repo.saveCalls, 1);
+  });
+
+  testWidgets('Retry loads the waveform again', (tester) async {
+    final loader = _FakeLoader(fail: true);
+    await tester.pumpWidget(_app(_FakeRepo(), loader: loader));
+    await _open(tester);
+    expect(loader.loadCalls, 1);
+
+    loader.fail = false;
+    await tester.tap(find.byKey(const Key('waveform_retry')));
+    await tester.pumpAndSettle();
+
+    expect(loader.loadCalls, 2);
+    expect(find.byType(WaveformView), findsOneWidget);
   });
 }

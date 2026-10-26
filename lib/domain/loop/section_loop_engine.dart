@@ -37,6 +37,9 @@ class SectionLoopEngine {
   bool get hasActiveSession => _session != null && !_session!.isCompleted;
 
   /// Begin a new section-loop session. Any previous session is replaced.
+  ///
+  /// The session starts ARMED: nothing happens (no seeking, no counting)
+  /// until playback reaches [loopStartMs] by itself.
   void startSession({
     required int loopStartMs,
     required int loopEndMs,
@@ -85,6 +88,15 @@ class SectionLoopEngine {
       return SectionLoopAction.none;
     }
 
+    // Armed: wait until playback reaches the loop region by itself. Before the
+    // start, or already past the end, the song just plays normally.
+    if (!s.entered) {
+      if (positionMs < s.loopStartMs || positionMs >= s.loopEndMs) {
+        return SectionLoopAction.none;
+      }
+      s.entered = true;
+    }
+
     // Reached (or about to reach) the loop-end boundary.
     if (positionMs >= s.loopEndMs - effectiveTolerance) {
       if (s.isFinite) {
@@ -101,21 +113,34 @@ class SectionLoopEngine {
     return SectionLoopAction.none;
   }
 
-  /// Called when the user manually seeks (drag on the seek bar, etc.).
+  /// Called when the user manually seeks (drag on the seek bar, lock screen,
+  /// Previous-restart, ...).
   ///
-  /// * If [targetMs] is outside the loop region → the session is cancelled
-  ///   (playback continues from the new position as Off). [PLAN §4.2]
-  /// * If inside → [seekPending] is set so stale events don't double-count.
+  /// * Before the loop start → the loop is re-armed: playback continues
+  ///   normally and the loop starts again when it reaches the start.
+  /// * Past the loop end → if the loop was running it ends (playback
+  ///   continues normally, [PLAN §4.2]); if it had not started yet it stays
+  ///   armed.
+  /// * Inside the region → [seekPending] guards against stale position
+  ///   events, so no extra repetition is counted.
   void onManualSeek(int targetMs) {
     final s = _session;
     if (s == null || s.isCompleted) return;
 
-    if (targetMs < s.loopStartMs || targetMs >= s.loopEndMs) {
-      // Outside the loop region.
-      s.isCompleted = true;
+    if (targetMs < s.loopStartMs) {
+      s.entered = false;
+      s.seekPending = false;
+      s.iterationsCompleted = 0;
+    } else if (targetMs >= s.loopEndMs) {
+      s.seekPending = false;
+      if (s.entered) s.isCompleted = true;
     } else {
-      // Inside: guard against stale position events after the seek.
-      s.seekPending = true;
+      // A seek into the last few ms of the region would never be "confirmed"
+      // by a later position below the boundary, so don't wait for that.
+      final length = s.loopEndMs - s.loopStartMs;
+      final tolerance =
+          length > 0 ? math.min(toleranceMs, length ~/ 2) : toleranceMs;
+      s.seekPending = targetMs < s.loopEndMs - tolerance;
     }
   }
 
@@ -127,6 +152,8 @@ class SectionLoopEngine {
     final s = _session;
     if (s == null || s.isCompleted) return SectionLoopAction.none;
     if (trackGeneration != s.trackGeneration) return SectionLoopAction.none;
+    // The song ended without the loop ever starting: nothing to loop.
+    if (!s.entered) return SectionLoopAction.none;
 
     if (s.isFinite) {
       s.iterationsCompleted++;

@@ -33,6 +33,10 @@ class StoragePaths {
   static String resolve(String stored) =>
       p.isAbsolute(stored) ? stored : p.join(_docs, stored);
 
+  /// Where a song's cached waveform lives (relative to Documents).
+  static String waveformRelativePath(String songId) =>
+      p.join('waveforms', '$songId.wave');
+
   /// Makes sure a folder inside Documents exists (e.g. "music") and returns it.
   static Future<Directory> ensureDir(String relative) async {
     final dir = Directory(p.join(_docs, relative));

@@ -1,8 +1,11 @@
-/// Transient runtime state for an active section loop. [PRD FR-020]
+/// Transient runtime state for a section loop. [PRD FR-020]
 ///
 /// Never written to the database. Created when a song with a section-loop
 /// profile starts playing (or the editor saves), and thrown away on track
 /// change, cancel, or completion.
+///
+/// A session starts ARMED ([entered] == false): the song plays normally and
+/// the loop only takes over once playback reaches the loop start.
 class ActiveLoopSession {
   ActiveLoopSession({
     required this.loopStartMs,
@@ -27,6 +30,11 @@ class ActiveLoopSession {
   /// The [_generation] value from the audio handler when this session was
   /// created. Position events with a different generation are stale.
   final int trackGeneration;
+
+  /// False while the loop is only "armed": it is set, but playback has not
+  /// reached [loopStartMs] yet, so the song plays normally. Becomes true the
+  /// first time the playhead is inside the loop region.
+  bool entered = false;
 
   /// How many complete plays of the section have happened so far.
   int iterationsCompleted = 0;

@@ -189,13 +189,9 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
         finiteCount: profile.finiteCount ?? 1,
         trackGeneration: _generation,
       );
+      // The loop is only ARMED: playback is NOT moved. The loop takes over
+      // when the song reaches the loop start by itself.
       _setMode(profile.mode);
-
-      // If current position is outside the loop region, jump into it
-      final currentMs = _player.position.inMilliseconds;
-      if (currentMs < profile.loopStartMs! || currentMs >= profile.loopEndMs!) {
-        await _player.seek(Duration(milliseconds: profile.loopStartMs!));
-      }
     } else {
       _sectionLoop.cancelSession();
       _setMode(LoopMode.off);
@@ -371,12 +367,9 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
           finiteCount: profile.finiteCount ?? 1,
           trackGeneration: generation,
         );
+        // Armed only: the song plays from where it normally starts, and the
+        // loop takes over when playback reaches the loop start.
         _setMode(profile.mode);
-
-        if (initialPosition == Duration.zero && profile.loopStartMs! > 0) {
-          await _player.seek(Duration(milliseconds: profile.loopStartMs!));
-          if (generation != _generation) return;
-        }
       } else {
         _setMode(LoopMode.off);
       }
@@ -418,6 +411,10 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
           await _finishQueue();
         }
         return;
+      } else {
+        // The song ended before the loop ever started: the loop is over.
+        _sectionLoop.cancelSession();
+        _setMode(LoopMode.off);
       }
     }
 
