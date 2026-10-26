@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 /// What the audio handler should do after a position update during Preview.
 enum PreviewAction {
   /// Keep playing.
@@ -23,9 +21,6 @@ class PreviewSession {
     required this.trackGeneration,
   });
 
-  /// Playback starts this long before the region, to hear the lead-in.
-  static const int leadInMs = 2000;
-
   /// Stop this early: position updates only arrive every ~200 ms, so waiting
   /// for the exact end would run past it more often than not.
   static const int endToleranceMs = 100;
@@ -45,8 +40,8 @@ class PreviewSession {
   /// they cannot end the preview immediately.
   bool landed = false;
 
-  /// Where playback starts: [leadInMs] before the region, never below 0.
-  int get playFromMs => math.max(0, regionStartMs - leadInMs);
+  /// Where playback starts: exactly at the region's Start.
+  int get playFromMs => regionStartMs;
 
   PreviewAction onPosition(int positionMs, int generation) {
     if (generation != trackGeneration) return PreviewAction.none;

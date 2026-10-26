@@ -19,7 +19,7 @@ import 'waveform_view.dart';
 /// Opened by a long press on the Loop button. Pick Off / Finite / Infinite,
 /// a start, an end and a play count; it is SAVED per song. The loop does not
 /// move playback: it starts by itself when the song reaches Start.
-/// Preview plays the region (unsaved) from 2 s before Start until End.
+/// Preview plays the region (unsaved) from exactly Start until End.
 /// The waveform has draggable Start/End handles and each time field has
 /// +/-100 ms buttons (Phase 4-2); all of them just edit the two text fields.
 ///
@@ -208,7 +208,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
   }
 
   /// Preview button: plays the region as it is NOW in the fields (unsaved),
-  /// from 2 s before Start until End. Pressing it again stops. [PRD FR-029]
+  /// from exactly Start until End. Pressing it again stops. [PRD FR-029]
   Future<void> _togglePreview(bool previewing) async {
     if (previewing) {
       _stopPreview();

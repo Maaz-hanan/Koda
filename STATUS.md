@@ -54,8 +54,7 @@ Run on phone: `flutter devices`, then `flutter run -d <iPhone ID>`
   done: <CONFIRM which: finite N plays / infinite >20 plays / pause-resume /
   seek inside / seek outside / in-app Next / lock-screen Next /
   Control Centre Next / profile survives restart / other song keeps its own>.
-- Phase 4-1: zip file was downloaded and the waveform is displayed with whatever function it 
-  was set to do
+- Phase 4 (waveform, handles, Preview): done and tested, see the Phase 4 section.
 
 ## Phase 3 — what exists (written by Claude 3-1 + Antigravity 3-2)
 - Editor: lib/presentation/now_playing/loop_editor_sheet.dart (Off / Finite /
@@ -97,7 +96,7 @@ Retested on the iPhone: owner reports "everything seems to be working".
 
 ## Key decisions / gotchas
 - metadata_god and just_waveform REMOVED (metadata_god needs Rust). Tags are
-  read with audio_metadata_reader (pure Dart). Re-add a waveform package in Phase 4.
+  read with audio_metadata_reader (pure Dart). just_waveform was added in Phase 4.
 - Song.filePath / artworkPath are stored RELATIVE ("music/<id>.mp3") because iOS
   app folder paths can change. Always use song.absoluteFilePath /
   song.absoluteArtworkPath (extension in lib/core/storage_paths.dart).
@@ -134,7 +133,7 @@ Retested on the iPhone: owner reports "everything seems to be working".
 ## Known limitations
 - Loop end is not sample-accurate: position updates arrive ~every 200 ms and the
   engine seeks back when within 200 ms of End, so the loop can end up to ~0.2 s
-  early. PRD FR-028 wants ~100 ms; revisit in Phase 4 (faster position stream
+  early. PRD FR-028 wants ~100 ms; revisit in Phase 6/7 (not done in Phase 4; faster position stream
   only while a loop is active; verify the just_audio API first).
 - Duration is 0 if tags lack it; the player shows the real duration but it is
   not written back to the database yet.
@@ -144,75 +143,73 @@ Retested on the iPhone: owner reports "everything seems to be working".
 - Library only has the Songs view (no Albums/Artists/Playlists/Favorites/
   Recently Played yet; PRD FR-003) and no queue view (FR-008).
 
-## Phase 4 — waveform editor (IN PROGRESS, split in 3 steps)
-- 4-1 (TESTED on the iPhone, see "Tested"): waveform generated with the
-  just_waveform package (verified API: JustWaveform.extract(audioInFile: File,
-  waveOutFile: File, zoom) -> Stream<WaveformProgress>; JustWaveform.parse(File)
-  -> Future<Waveform>; Waveform.getPixelMin/Max, flags, sampleRate,
-  samplesPerPixel, length). Cached on disk as waveforms/<songId>.wave (written
-  as .part then renamed; deleted when the song is removed). Shown inside the
-  loop editor: region highlighted from the Start/End fields, moving playhead,
-  progress while generating, error message + Retry (the time fields still work).
+## Phase 4 — waveform editor (DONE, tested on the iPhone)
+- 4-1 waveform: generated with just_waveform (verified API:
+  JustWaveform.extract(audioInFile: File, waveOutFile: File, zoom) ->
+  Stream<WaveformProgress>; JustWaveform.parse(File) -> Future<Waveform>).
+  Works for MP3, M4A and WAV. Cached on disk as waveforms/<songId>.wave
+  (written as .part then renamed; deleted when the song is removed). Shown in
+  the loop editor with region highlight, moving playhead, progress while
+  generating, error + Retry (the time fields still work without it).
   Files: lib/data/services/waveform_service.dart,
-  lib/domain/waveform/waveform_peaks.dart, waveform_loader.dart,
+  lib/domain/waveform/waveform_peaks.dart + waveform_loader.dart,
   lib/providers/waveform_provider.dart,
-  lib/presentation/now_playing/waveform_view.dart (+ editor integration).
-  Added package: just_waveform ^0.0.7.
-- 4-2 (TESTED on the iPhone: owner reports "everything seems to be working"): draggable Start (green)
-  and End (red) handles on the waveform with time labels; +/-100 ms buttons
-  beside each time field; handles cannot cross (minimum gap 100 ms) or leave
-  0..song length; moving one handle never moves the other. Handles and text
-  fields always show the same values (the fields are the source of truth;
-  nothing is saved until Save, Cancel still discards). Handles only appear
-  while Finite or Infinite is selected.
-  New: lib/domain/loop/loop_region.dart (pure Dart clamp/snap rules),
-  test/loop_region_test.dart, test/waveform_view_test.dart.
-  Changed: lib/presentation/now_playing/waveform_view.dart (now a
-  StatefulWidget with onStartChanged/onEndChanged), loop_editor_sheet.dart,
-  test/loop_editor_test.dart (5 new tests; the prefill test now reads the
-  field text, because the handle labels show the same times).
-  No packages added.
-- 4-3 (written by Claude, NOT yet run or tested by me): Preview button in the
-  loop editor (under the waveform; becomes "Stop preview" while playing).
-  Plays the UNSAVED Start/End from the fields: starts 2 s before Start
-  (never below 0:00) and PAUSES when End is reached (stops ~100 ms early
-  because position updates come every ~200 ms). The playhead on the waveform
-  and the Now Playing seek bar follow as usual.
+  lib/presentation/now_playing/waveform_view.dart.
+  Package added: just_waveform ^0.0.7.
+- 4-2 handles: green Start / red End handles on the waveform with time labels,
+  +/-100 ms buttons beside each time field. Handles cannot cross (minimum gap
+  100 ms) or leave 0..song length; moving one never moves the other. Dragging
+  snaps to 10 ms. The text fields are the source of truth: handles and fields
+  always show the same values, nothing is saved until Save, Cancel discards.
+  Handles only appear while Finite or Infinite is selected.
+  Files: lib/domain/loop/loop_region.dart (pure Dart clamp/snap rules),
+  waveform_view.dart (StatefulWidget, onStartChanged/onEndChanged),
+  loop_editor_sheet.dart.
+- 4-3 Preview: button under the waveform in the loop editor ("Preview" /
+  "Stop preview"). Plays the UNSAVED Start/End from the fields, starting
+  EXACTLY at Start (owner asked to remove the earlier 2 s lead-in), and PAUSES
+  at End (stops ~100 ms early because position updates arrive every ~200 ms).
   Rules: while previewing, the saved/armed section loop gets NO position
   events (only one thing controls playback). Preview ends on: reaching End,
   Stop button (pauses), Next/Previous/tapping another song, a seek-bar drag
   or any seek, Save (the new loop takes over), the song completing, and
-  closing the editor (song keeps playing). When it ends the saved loop is
-  told where the playhead is, exactly like a manual seek (re-armed if before
-  Start, ended if past End). Preview moves the playhead; it does not go back
-  to where you were. Preview never writes to the database.
-  New: lib/domain/playback/preview_session.dart (pure Dart),
-  test/preview_session_test.dart.
-  Changed: lib/domain/playback/audio_handler.dart (previewRegion,
-  stopPreview, _finishPreview + one-line hooks in _endRepeat,
-  _onPositionChanged, applyLoopProfile, seek, skipToPrevious restart,
-  _onTrackCompleted), lib/providers/audio_handler_provider.dart (3 new
-  providers), loop_editor_sheet.dart, test/loop_editor_test.dart (6 new
-  tests; test screen made taller). No packages added.
-  The handler part cannot be unit-tested (needs a real player): iPhone only.
-- Was UNVERIFIED about 4-2 (owner reports it works): grabbing a handle with a finger
-  (grab radius is 28 px), dragging inside the bottom sheet without the sheet
-  moving, and the two time labels when the handles are very close together or
-  near the left/right edge.
-- Known 4-2 limitation: a long press on +/- does not auto-repeat.
+  closing the editor (song keeps playing). When it ends the saved loop is told
+  where the playhead is, exactly like a manual seek (re-armed if before Start,
+  ended if past End). Preview moves the playhead and does not return to where
+  you were. Preview never writes to the database.
+  Files: lib/domain/playback/preview_session.dart (pure Dart),
+  lib/domain/playback/audio_handler.dart (previewRegion, stopPreview,
+  _finishPreview + one-line hooks in _endRepeat, _onPositionChanged,
+  applyLoopProfile, seek, skipToPrevious restart, _onTrackCompleted),
+  lib/providers/audio_handler_provider.dart (loopPreviewStartProvider,
+  loopPreviewStopProvider, loopPreviewingProvider).
+- Phase 4 tests: loop_region_test, waveform_view_test, preview_session_test,
+  loop_editor_test (19 widget tests). The handler's preview code cannot be
+  unit-tested (needs a real player): iPhone only.
+- Phase 4 limitations: long-press on +/- does not auto-repeat; the very
+  short-region edge case (region under ~1 s with the playhead already inside
+  it) may end a preview immediately; the waveform needs a song that
+  just_waveform can decode (error + Retry otherwise).
 
 ## Tested
-- Phase 4-2 on the iPhone (handles, labels, +/- buttons, clamping): owner says
-  everything seems to be working.
-- Phase 4-1 on the iPhone (waveform for MP3 / M4A / WAV, cache on 2nd open,
-  region highlight, playhead, error + Retry).
+- Phase 4-1, 4-2, 4-3 on the iPhone: owner reports everything works.
+- AFTER that, the 2 s lead-in was removed from Preview (preview_session.dart,
+  its test and comments). Owner has not retested that one change yet:
+  <CONFIRM: Preview starts exactly at Start>.
 - <CONFIRM: any Phase 3 checks from the list above that I have not done,
   especially lock-screen / Control Centre / headphone Next during an infinite
   section loop>.
+- <CONFIRM: real `flutter test` pass count and `flutter analyze` result>.
 
 ## Next steps
-1. Run `flutter test` and `flutter analyze` (record the real test count here:
-   <CONFIRM>), then test Phase 4-3 on the iPhone (checklist in the chat).
-   Fix anything found. Phase 4 is done after that.
-3. Phase 5 Auto Loop, Phase 6 polish (library views, queue, FR-043 entry point,
-   FR-025 indicator), Phase 7 regression + performance.
+1. Phase 5 Auto Loop (PRD FR-033..FR-039, LoopPlayer_Plan.md Phase 5): target
+   duration, candidate analysis, preview + adjustable handles (reuse the Phase 4
+   editor), never overwrite a saved loop without confirmation, honest "no good
+   candidate" result, loading/failure states with retry. It may need an audio
+   analysis approach or package: ASK the owner before adding any package, and
+   verify APIs with a web search first. Propose the plan before writing code.
+2. Phase 6 polish (library views Albums/Artists/Playlists/Favorites/Recently
+   Played, queue view FR-008, always-visible editor entry point FR-043, loop
+   indicator with remaining plays FR-025, lock-screen loop state, tighter loop
+   end timing toward ~100 ms FR-028).
+3. Phase 7 regression + performance.

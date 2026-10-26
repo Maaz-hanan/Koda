@@ -222,7 +222,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
-  /// Previews [startMs]..[endMs] of the CURRENT song: plays from 2 s before
+  /// Previews [startMs]..[endMs] of the CURRENT song: plays from exactly
   /// [startMs] and pauses at [endMs]. Works on the unsaved values from the
   /// editor and never changes the saved loop. Returns false if [songId] is not
   /// the song that is loaded. [PRD FR-029]
