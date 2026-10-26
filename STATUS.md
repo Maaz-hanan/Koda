@@ -9,6 +9,9 @@ Flutter 3.44.0 / Dart 3.12. Tested on iPhone 17 Simulator AND a real iPhone 13
 (iOS 26.6.1, USB-C to Lightning cable).
 Project folder: ~/Developer/LoopPlayer (moved out of Desktop because iCloud
 metadata caused "CodeSign failed"). The project is a git repo.
+Git: the last good state is the Phase 4 end commit 0dfb8d5 ("final changes done
+in Phase 4"). A Phase 5 commit (602747c) was made and then REMOVED by the owner
+(see "Phase 5 — DROPPED"). I commit after each tested step.
 I edit code in VS Code. Xcode is only for building/signing.
 Bundle ID: com.uniquema.loopplayer (free Apple ID signing; the build expires
 after ~7 days and is simply rebuilt).
@@ -55,6 +58,28 @@ Run on phone: `flutter devices`, then `flutter run -d <iPhone ID>`
   seek inside / seek outside / in-app Next / lock-screen Next /
   Control Centre Next / profile survives restart / other song keeps its own>.
 - Phase 4 (waveform, handles, Preview): done and tested, see the Phase 4 section.
+- Phase 5 (Auto Loop): DROPPED by the owner, never shipped. See below.
+
+## Phase 5 — DROPPED (owner's decision, do NOT build)
+- Phase 5 (Auto Loop, PRD FR-033..FR-039) is intentionally NOT part of this app.
+  A first version was built and then removed. The code is back to the Phase 4
+  end state (a new chat that read the uploaded folder found no auto_loop files
+  in lib/ or test/, no Phase 5 provider, and no pubspec change).
+- Why: the owner did not want a whole-song "find the best loop" search. What
+  they actually wanted is much smaller: they pick a loop themselves (for
+  example 3:30 to 3:40) and the app helps by refining it to the best spot
+  NEARBY (for example 3:32, because 3:30 is just random music and 3:32 is the
+  real start of the part). That idea is NOT planned. If the owner ever asks for
+  it, propose a small "snap to nearby" feature first, and ask before anything
+  else.
+- Ignore every Auto Loop mention in PRD.md / LoopPlayer_Plan.md (PRD section 8,
+  the "or use Auto Loop" line in 3.2, the Auto Loop test items in 15 and the
+  Auto Loop line in 18). Phase 6 is next.
+- Database: the loop_profiles column auto_loop_prefs_json and the model field
+  autoLoopPrefsJson were created BEFORE Phase 5 and are unused. Leave them
+  alone: removing a column needs a migration, which is risk for no benefit.
+- Possible cleanup (optional): if a git stash or backup of the Phase 5 work
+  still exists, it can be deleted once Phase 6 is stable.
 
 ## Phase 3 — what exists (written by Claude 3-1 + Antigravity 3-2)
 - Editor: lib/presentation/now_playing/loop_editor_sheet.dart (Off / Finite /
@@ -201,15 +226,42 @@ Retested on the iPhone: owner reports "everything seems to be working".
   section loop>.
 - <CONFIRM: real `flutter test` pass count and `flutter analyze` result>.
 
+## Facts about the code that matter for Phase 6 (read from the files)
+- Database is version 1. The songs table ALREADY has last_played_at and
+  is_favorite, and Song already has lastPlayedAt / isFavorite, but NOTHING
+  writes them yet and no screen shows them. Favorites and Recently Played need
+  no migration.
+- There is no playlist table. Playlists need a database migration (version 2),
+  which is the one risky change in Phase 6. Ask the owner first.
+- Albums and Artists can be built by grouping the existing songs (album and
+  artist fields); no database change.
+- The library screen (lib/presentation/library/library_screen.dart) is one
+  Songs list with search, import, remove. main.dart opens LibraryScreen
+  directly.
+- The queue lives in QueueManager (lib/domain/playback/queue_manager.dart,
+  songs + index) inside the audio handler; there is no queue screen and the
+  handler has no "jump to queue index" method yet.
+- The Loop button shows A-B for section loops but no remaining-plays count, and
+  nothing shows whether a saved section loop is waiting or running (FR-025).
+  The section engine state is in lib/domain/loop/active_loop_session.dart and
+  section_loop_engine.dart.
+
 ## Next steps
-1. Phase 5 Auto Loop (PRD FR-033..FR-039, LoopPlayer_Plan.md Phase 5): target
-   duration, candidate analysis, preview + adjustable handles (reuse the Phase 4
-   editor), never overwrite a saved loop without confirmation, honest "no good
-   candidate" result, loading/failure states with retry. It may need an audio
-   analysis approach or package: ASK the owner before adding any package, and
-   verify APIs with a web search first. Propose the plan before writing code.
-2. Phase 6 polish (library views Albums/Artists/Playlists/Favorites/Recently
-   Played, queue view FR-008, always-visible editor entry point FR-043, loop
-   indicator with remaining plays FR-025, lock-screen loop state, tighter loop
-   end timing toward ~100 ms FR-028).
-3. Phase 7 regression + performance.
+1. Phase 6 (Plan: "Library Completeness, UI Polish, and Hardening"), in small
+   steps. Proposed order (owner to approve before coding):
+   - 6-1 Loop indicator on Now Playing (FR-025, FR-042): shows section loop
+     range, waiting vs running, remaining plays ("3 left") or infinity, plus a
+     visible "Edit loop" button as the alternative entry point (FR-043).
+   - 6-2 Favorites + Recently Played: heart button on Now Playing and in the
+     library, the handler writes last_played_at when a song starts. No
+     migration.
+   - 6-3 Library views: Songs / Albums / Artists / Favorites / Recently Played
+     (FR-003).
+   - 6-4 Queue view (FR-008): list, tap to jump, remove.
+   - 6-5 (needs DB migration, ask first) Basic playlists: create, rename,
+     delete, add/remove songs.
+   - Optional, ask first: tighter loop end timing toward ~100 ms (FR-028, needs
+     a faster position stream while a loop is active; verify the just_audio
+     API first), lock-screen loop state, accessibility pass (labels, 44 pt
+     touch targets).
+2. Phase 7 regression + performance on the real iPhone.

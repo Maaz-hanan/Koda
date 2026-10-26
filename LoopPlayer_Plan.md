@@ -1,5 +1,8 @@
 # LoopPlayer — Revised Implementation Plan
 
+> **Owner decision: Phase 5 (Auto Loop) is DROPPED and must NOT be built.**
+> Skip every Auto Loop item below. After Phase 4 the next phase is Phase 6.
+
 > [!IMPORTANT]
 > **No application code has been written or modified.** This is the plan for your approval.
 

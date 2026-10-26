@@ -1,5 +1,10 @@
 # Product Requirements Document (PRD)
 
+> **Owner decision: Phase 5 (Auto Loop) is DROPPED and must NOT be built.**
+> Ignore section 8 (FR-033 to FR-039), the "or use Auto Loop" line in 3.2, the
+> Auto Loop items in section 15 and the Auto Loop line in section 18. Phase 6
+> comes after Phase 4. Everything else in this document still applies.
+
 **Personal Music Player with Intelligent Section Looping**
 
 | Field | Value |
