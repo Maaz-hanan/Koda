@@ -162,9 +162,10 @@ Retested on the iPhone: owner reports "everything seems to be working".
   only while a loop is active; verify the just_audio API first).
 - Duration is 0 if tags lack it; the player shows the real duration but it is
   not written back to the database yet.
-- No on-screen "remaining plays" / "loop active vs waiting" indicator (PRD FR-025).
+- On-screen "remaining plays" / "loop active vs waiting" indicator: written in
+  6-1, not yet tested by the owner (see Phase 6 progress).
 - Lock screen does not show the repeat/loop state.
-- Always-visible alternative entry point to the loop editor (PRD FR-043) not built.
+- Always-visible "Edit loop" button (PRD FR-043): written in 6-1, not yet tested.
 - Library only has the Songs view (no Albums/Artists/Playlists/Favorites/
   Recently Played yet; PRD FR-003) and no queue view (FR-008).
 
@@ -245,6 +246,34 @@ Retested on the iPhone: owner reports "everything seems to be working".
   nothing shows whether a saved section loop is waiting or running (FR-025).
   The section engine state is in lib/domain/loop/active_loop_session.dart and
   section_loop_engine.dart.
+
+## Phase 6 progress
+- Phase 5 is skipped on purpose. Phase 6 = steps 6-1..6-4 (6-5 playlists only
+  if the owner says yes; optional extras only if the owner says yes).
+- 6-1 Loop indicator: WRITTEN, NOT YET RUN by the owner (Claude could not run
+  Flutter). <CONFIRM: flutter test / analyze / iPhone check>.
+  What it does: Now Playing shows, under the Loop button, a card with the
+  section range ("Loop 1:05 - 1:20"), "Waiting - starts at 1:05" or
+  "Running - 3 left" / "Running - infinity", plus an always-visible
+  "Edit loop" button that opens the same editor as the long press.
+  How: the handler takes a read-only snapshot of the engine session
+  (SectionLoopStatus) through _publishLoopStatus() after every change and
+  publishes it on loopStatusStream; loopStatusProvider (a Notifier, like
+  repeatModeProvider) feeds LoopStatusPanel. The engine rules are unchanged
+  and nothing is written to the database. "N left" includes the play in
+  progress (first play of 3 shows "3 left").
+  Files: lib/domain/loop/loop_status.dart (pure Dart),
+  lib/presentation/now_playing/loop_status_panel.dart,
+  lib/providers/audio_handler_provider.dart (loopStatusProvider),
+  lib/domain/playback/audio_handler.dart (11 small _publishLoopStatus calls),
+  lib/presentation/now_playing/now_playing_screen.dart.
+  Tests: test/loop_status_test.dart (drives the real engine),
+  test/loop_status_panel_test.dart.
+  iPhone checks to do: set a finite loop while the song is before Start ->
+  card says Waiting; when playback reaches Start -> Running and the number
+  counts down; infinite -> infinity sign; Next / tapping the Loop button ->
+  card disappears; seek before Start -> back to Waiting; Edit loop opens the
+  editor.
 
 ## Next steps
 1. Phase 6 (Plan: "Library Completeness, UI Polish, and Hardening"), in small

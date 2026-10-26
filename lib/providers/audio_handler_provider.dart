@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/loop_profile.dart';
 import '../domain/loop/loop_mode.dart';
+import '../domain/loop/loop_status.dart';
 import '../domain/playback/audio_handler.dart';
 
 /// The single audio handler. Created in main() and injected there.
@@ -38,6 +39,22 @@ class RepeatModeNotifier extends Notifier<LoopMode> {
 
 final repeatModeProvider =
     NotifierProvider<RepeatModeNotifier, LoopMode>(RepeatModeNotifier.new);
+
+/// The section loop picture for Now Playing: range, waiting / running and
+/// plays left. Null when no section loop is set. [PRD FR-025]
+class LoopStatusNotifier extends Notifier<SectionLoopStatus?> {
+  @override
+  SectionLoopStatus? build() {
+    final handler = ref.watch(audioHandlerProvider);
+    final sub = handler.loopStatusStream.listen((status) => state = status);
+    ref.onDispose(sub.cancel);
+    return handler.loopStatus;
+  }
+}
+
+final loopStatusProvider =
+    NotifierProvider<LoopStatusNotifier, SectionLoopStatus?>(
+        LoopStatusNotifier.new);
 
 /// Applies a just-saved loop profile to the song that is playing.
 /// A separate provider so the editor can be tested without a real player.

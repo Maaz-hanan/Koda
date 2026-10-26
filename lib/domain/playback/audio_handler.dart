@@ -12,6 +12,7 @@ import '../../data/models/song.dart';
 import '../../data/repositories/loop_profile_repository.dart';
 import '../../data/services/playback_persistence.dart';
 import '../loop/loop_mode.dart';
+import '../loop/loop_status.dart';
 import '../loop/section_loop_engine.dart';
 import '../loop/whole_song_repeat.dart';
 import 'playback_restore.dart';
@@ -59,6 +60,24 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   bool get isPreviewing => _preview != null;
   Stream<bool> get previewingStream => _previewChanges.stream;
 
+  /// What the Now Playing screen shows about the section loop (range,
+  /// waiting / running, plays left). Null when there is no loop. [PRD FR-025]
+  SectionLoopStatus? _loopStatus;
+  final StreamController<SectionLoopStatus?> _loopStatusChanges =
+      StreamController<SectionLoopStatus?>.broadcast();
+
+  SectionLoopStatus? get loopStatus => _loopStatus;
+  Stream<SectionLoopStatus?> get loopStatusStream => _loopStatusChanges.stream;
+
+  /// Takes a fresh snapshot of the engine and tells the screen, but only if
+  /// something changed (position events arrive every ~200 ms).
+  void _publishLoopStatus() {
+    final next = SectionLoopStatus.fromSession(_sectionLoop.session);
+    if (next == _loopStatus) return;
+    _loopStatus = next;
+    _loopStatusChanges.add(next);
+  }
+
   final StreamController<LoopMode> _repeatChanges =
       StreamController<LoopMode>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
@@ -94,6 +113,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     _sectionLoop.cancelSession();
     _repeat.setMode(next);
     _setMode(next);
+    _publishLoopStatus();
   }
 
   /// A different song is about to play, so whole-song repeat and section loop end.
@@ -103,6 +123,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     _repeat.onTrackChange();
     _sectionLoop.cancelSession();
     _setMode(LoopMode.off);
+    _publishLoopStatus();
   }
 
   /// Human-readable playback problems (e.g. a damaged file) for the UI.
@@ -176,6 +197,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
       case SectionLoopAction.none:
         break;
     }
+    _publishLoopStatus();
   }
 
   // -------------------------------------------------------------------------
@@ -220,6 +242,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
       _sectionLoop.cancelSession();
       _setMode(LoopMode.off);
     }
+    _publishLoopStatus();
   }
 
   /// Previews [startMs]..[endMs] of the CURRENT song: plays from exactly
@@ -276,6 +299,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
               _currentMode == LoopMode.infiniteSection)) {
         _setMode(LoopMode.off);
       }
+      _publishLoopStatus();
     }
   }
 
@@ -361,6 +385,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
             _currentMode == LoopMode.infiniteSection)) {
       _setMode(LoopMode.off);
     }
+    _publishLoopStatus();
     return _player.seek(position);
   }
 
@@ -390,6 +415,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
               _currentMode == LoopMode.infiniteSection)) {
         _setMode(LoopMode.off);
       }
+      _publishLoopStatus();
       await _player.seek(Duration.zero);
       return;
     }
@@ -456,6 +482,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
       } else {
         _setMode(LoopMode.off);
       }
+      _publishLoopStatus();
 
       await saveNow();
       if (autoPlay) unawaited(_player.play());
@@ -484,6 +511,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     // 1. If section loop is active, let it handle the completion
     if (_sectionLoop.hasActiveSession) {
       final action = _sectionLoop.onSongCompleted(_generation);
+      _publishLoopStatus();
       if (action == SectionLoopAction.seekToStart) {
         final session = _sectionLoop.session;
         if (session != null) {
@@ -505,6 +533,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
         // The song ended before the loop ever started: the loop is over.
         _sectionLoop.cancelSession();
         _setMode(LoopMode.off);
+        _publishLoopStatus();
       }
     }
 

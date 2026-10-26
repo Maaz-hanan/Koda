@@ -7,6 +7,7 @@ import '../../providers/audio_handler_provider.dart';
 import '../shared/artwork_widget.dart';
 import 'loop_button.dart';
 import 'loop_editor_sheet.dart';
+import 'loop_status_panel.dart';
 
 /// Full-screen player. [PRD FR-007, FR-040]
 ///
@@ -51,9 +52,18 @@ class NowPlayingScreen extends ConsumerWidget {
 
     final handler = ref.read(audioHandlerProvider);
     final repeatMode = ref.watch(repeatModeProvider);
+    final loopStatus = ref.watch(loopStatusProvider);
     final scheme = Theme.of(context).colorScheme;
     final artSize =
         (MediaQuery.sizeOf(context).width - 64).clamp(200.0, 360.0).toDouble();
+
+    // The long press on the Loop button and the "Edit loop" button open the
+    // same editor.
+    void openEditor() => LoopEditorSheet.show(
+          context,
+          songId: item.id,
+          durationMs: item.duration?.inMilliseconds ?? 0,
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -134,12 +144,10 @@ class NowPlayingScreen extends ConsumerWidget {
               LoopButton(
                 mode: repeatMode,
                 onTap: handler.cycleRepeatMode,
-                onLongPress: () => LoopEditorSheet.show(
-                  context,
-                  songId: item.id,
-                  durationMs: item.duration?.inMilliseconds ?? 0,
-                ),
+                onLongPress: openEditor,
               ),
+              const SizedBox(height: 8),
+              LoopStatusPanel(status: loopStatus, onEdit: openEditor),
               const SizedBox(height: 32),
             ],
           ),
