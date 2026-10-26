@@ -46,6 +46,23 @@ final loopProfileApplierProvider =
   (ref) => ref.read(audioHandlerProvider).applyLoopProfile,
 );
 
+/// Loop-editor Preview. Separate providers (like the applier above) so the
+/// editor can be tested without a real player. [PRD FR-029]
+final loopPreviewStartProvider = Provider<
+    Future<bool> Function(
+        {required String songId, required int startMs, required int endMs})>(
+  (ref) => ref.read(audioHandlerProvider).previewRegion,
+);
+
+final loopPreviewStopProvider = Provider<void Function({bool pause})>(
+  (ref) => ref.read(audioHandlerProvider).stopPreview,
+);
+
+/// True while a preview is playing.
+final loopPreviewingProvider = StreamProvider<bool>(
+  (ref) => ref.watch(audioHandlerProvider).previewingStream,
+);
+
 /// Playback problems to show to the user.
 final playbackErrorProvider = StreamProvider<String>(
   (ref) => ref.watch(audioHandlerProvider).errors,

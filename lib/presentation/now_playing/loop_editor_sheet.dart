@@ -7,6 +7,7 @@ import '../../core/format_duration.dart';
 import '../../core/loop_time.dart';
 import '../../data/models/loop_profile.dart';
 import '../../domain/loop/loop_mode.dart';
+import '../../domain/loop/loop_region.dart';
 import '../../domain/waveform/waveform_peaks.dart';
 import '../../providers/audio_handler_provider.dart';
 import '../../providers/repository_providers.dart';
@@ -18,7 +19,9 @@ import 'waveform_view.dart';
 /// Opened by a long press on the Loop button. Pick Off / Finite / Infinite,
 /// a start, an end and a play count; it is SAVED per song. The loop does not
 /// move playback: it starts by itself when the song reaches Start.
-/// (Phase 4 adds the waveform.)
+/// Preview plays the region (unsaved) from 2 s before Start until End.
+/// The waveform has draggable Start/End handles and each time field has
+/// +/-100 ms buttons (Phase 4-2); all of them just edit the two text fields.
 ///
 /// Cancel and swipe-down never write anything, so the previous saved loop is
 /// untouched. Edits live only in this widget until you press Save.
@@ -63,6 +66,9 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
   bool _saving = false;
   String? _error;
 
+  /// Taken in initState because `ref` must not be used inside dispose().
+  late final void Function({bool pause}) _stopPreview;
+
   // Waveform (Phase 4-1)
   WaveformPeaks? _peaks;
   double _waveProgress = 0;
@@ -72,6 +78,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
   @override
   void initState() {
     super.initState();
+    _stopPreview = ref.read(loopPreviewStopProvider);
     _load();
     _loadWaveform(resetState: false); // fields already start in "loading"
   }
@@ -109,6 +116,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
 
   @override
   void dispose() {
+    // Closing the editor ends a running preview but lets the song carry on.
+    _stopPreview(pause: false);
     _startController.dispose();
     _endController.dispose();
     super.dispose();
@@ -143,6 +152,103 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
         loading: () => 0,
         error: (e, s) => 0,
       );
+
+  /// Song length used for limits: the real one, or the waveform's if unknown.
+  int get _totalMs =>
+      widget.durationMs > 0 ? widget.durationMs : (_peaks?.durationMs ?? 0);
+
+  /// Moves Start (drag or +/- button). End is never touched, and Start cannot
+  /// reach End or leave the song. [PRD FR-030, FR-032]
+  void _setStartMs(int proposedMs) {
+    final end = parseLoopTime(_endController.text);
+    if (end == null) {
+      setState(() => _error = 'Enter times like 1:05 or 65.');
+      return;
+    }
+    final start = LoopRegion.clampStart(proposedMs,
+        endMs: end, totalMs: _totalMs);
+    setState(() {
+      _startController.text = formatLoopTime(start);
+      _error = null;
+    });
+  }
+
+  /// Moves End. Start is never touched, and End cannot reach Start or leave
+  /// the song. [PRD FR-030, FR-032]
+  void _setEndMs(int proposedMs) {
+    final start = parseLoopTime(_startController.text);
+    if (start == null) {
+      setState(() => _error = 'Enter times like 1:05 or 65.');
+      return;
+    }
+    final end = LoopRegion.clampEnd(proposedMs,
+        startMs: start, totalMs: _totalMs);
+    setState(() {
+      _endController.text = formatLoopTime(end);
+      _error = null;
+    });
+  }
+
+  void _nudgeStart(int deltaMs) {
+    final start = parseLoopTime(_startController.text);
+    if (start == null) {
+      setState(() => _error = 'Enter times like 1:05 or 65.');
+      return;
+    }
+    _setStartMs(start + deltaMs);
+  }
+
+  void _nudgeEnd(int deltaMs) {
+    final end = parseLoopTime(_endController.text);
+    if (end == null) {
+      setState(() => _error = 'Enter times like 1:05 or 65.');
+      return;
+    }
+    _setEndMs(end + deltaMs);
+  }
+
+  /// Preview button: plays the region as it is NOW in the fields (unsaved),
+  /// from 2 s before Start until End. Pressing it again stops. [PRD FR-029]
+  Future<void> _togglePreview(bool previewing) async {
+    if (previewing) {
+      _stopPreview();
+      return;
+    }
+    final start = parseLoopTime(_startController.text);
+    final end = parseLoopTime(_endController.text);
+    if (start == null || end == null) {
+      setState(() => _error = 'Enter times like 1:05 or 65.');
+      return;
+    }
+    // Same range rules as saving.
+    final problem = LoopProfile(
+      songId: widget.songId,
+      mode: LoopMode.infiniteSection,
+      loopStartMs: start,
+      loopEndMs: end,
+      updatedAt: 0,
+    ).validate(durationMs: _totalMs);
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    setState(() => _error = null);
+
+    final startPreview = ref.read(loopPreviewStartProvider);
+    try {
+      final started = await startPreview(
+        songId: widget.songId,
+        startMs: start,
+        endMs: end,
+      );
+      if (!started && mounted) {
+        setState(() => _error =
+            'Preview only works while this song is the one that is playing.');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not start the preview: $e');
+    }
+  }
 
   Future<void> _save() async {
     final start = parseLoopTime(_startController.text);
@@ -248,17 +354,42 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                   ),
                   const SizedBox(height: 16),
                   _waveformBlock(scheme),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final previewing =
+                          ref.watch(loopPreviewingProvider).when(
+                                data: (v) => v,
+                                loading: () => false,
+                                error: (e, s) => false,
+                              );
+                      return Align(
+                        child: OutlinedButton.icon(
+                          key: const Key('loop_preview_button'),
+                          onPressed: () => _togglePreview(previewing),
+                          icon: Icon(
+                              previewing ? Icons.stop : Icons.play_arrow),
+                          label: Text(
+                              previewing ? 'Stop preview' : 'Preview'),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
                   _timeField(
                     fieldKey: const Key('loop_start_field'),
                     controller: _startController,
                     label: 'Start',
+                    onNudge: _nudgeStart,
+                    nudgeKeyPrefix: 'loop_start',
                   ),
                   const SizedBox(height: 12),
                   _timeField(
                     fieldKey: const Key('loop_end_field'),
                     controller: _endController,
                     label: 'End',
+                    onNudge: _nudgeEnd,
+                    nudgeKeyPrefix: 'loop_end',
                   ),
                   if (_mode != LoopMode.off) ...[
                     const SizedBox(height: 8),
@@ -392,6 +523,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
           startMs: start,
           endMs: end,
           positionMs: positionMs,
+          onStartChanged: _setStartMs,
+          onEndChanged: _setEndMs,
         );
       },
     );
@@ -401,6 +534,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
     required Key fieldKey,
     required TextEditingController controller,
     required String label,
+    required void Function(int deltaMs) onNudge,
+    required String nudgeKeyPrefix,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -418,7 +553,29 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
             onChanged: (_) => setState(() => _error = null),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: IconButton(
+            key: Key('${nudgeKeyPrefix}_minus'),
+            tooltip: '$label 0.1 s earlier',
+            constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.remove_circle_outline),
+            onPressed: () => onNudge(-LoopRegion.nudgeMs),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: IconButton(
+            key: Key('${nudgeKeyPrefix}_plus'),
+            tooltip: '$label 0.1 s later',
+            constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: () => onNudge(LoopRegion.nudgeMs),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: TextButton(

@@ -145,7 +145,7 @@ Retested on the iPhone: owner reports "everything seems to be working".
   Recently Played yet; PRD FR-003) and no queue view (FR-008).
 
 ## Phase 4 — waveform editor (IN PROGRESS, split in 3 steps)
-- 4-1 (written by Claude, NOT yet tested): waveform generated with the
+- 4-1 (TESTED on the iPhone, see "Tested"): waveform generated with the
   just_waveform package (verified API: JustWaveform.extract(audioInFile: File,
   waveOutFile: File, zoom) -> Stream<WaveformProgress>; JustWaveform.parse(File)
   -> Future<Waveform>; Waveform.getPixelMin/Max, flags, sampleRate,
@@ -157,16 +157,53 @@ Retested on the iPhone: owner reports "everything seems to be working".
   lib/domain/waveform/waveform_peaks.dart, waveform_loader.dart,
   lib/providers/waveform_provider.dart,
   lib/presentation/now_playing/waveform_view.dart (+ editor integration).
-  Added package: just_waveform ^0.0.7 (`flutter pub add just_waveform`).
-- UNVERIFIED about just_waveform: which audio formats it decodes on iOS (docs
-  only show an MP3 example). Test MP3, M4A/AAC and WAV on the iPhone. If M4A
-  fails, the alternative found was the `sonix` package (FFI + FFmpeg, supports
-  MP3/M4A/WAV/FLAC; API: Sonix().generateWaveformInIsolate(path) -> amplitudes
-  0..1); not tried.
-- 4-2 (next): draggable Start/End handles with timestamps, +/-100 ms buttons,
-  handles cannot cross. 4-3: Preview button (plays from 2 s before Start).
+  Added package: just_waveform ^0.0.7.
+- 4-2 (TESTED on the iPhone: owner reports "everything seems to be working"): draggable Start (green)
+  and End (red) handles on the waveform with time labels; +/-100 ms buttons
+  beside each time field; handles cannot cross (minimum gap 100 ms) or leave
+  0..song length; moving one handle never moves the other. Handles and text
+  fields always show the same values (the fields are the source of truth;
+  nothing is saved until Save, Cancel still discards). Handles only appear
+  while Finite or Infinite is selected.
+  New: lib/domain/loop/loop_region.dart (pure Dart clamp/snap rules),
+  test/loop_region_test.dart, test/waveform_view_test.dart.
+  Changed: lib/presentation/now_playing/waveform_view.dart (now a
+  StatefulWidget with onStartChanged/onEndChanged), loop_editor_sheet.dart,
+  test/loop_editor_test.dart (5 new tests; the prefill test now reads the
+  field text, because the handle labels show the same times).
+  No packages added.
+- 4-3 (written by Claude, NOT yet run or tested by me): Preview button in the
+  loop editor (under the waveform; becomes "Stop preview" while playing).
+  Plays the UNSAVED Start/End from the fields: starts 2 s before Start
+  (never below 0:00) and PAUSES when End is reached (stops ~100 ms early
+  because position updates come every ~200 ms). The playhead on the waveform
+  and the Now Playing seek bar follow as usual.
+  Rules: while previewing, the saved/armed section loop gets NO position
+  events (only one thing controls playback). Preview ends on: reaching End,
+  Stop button (pauses), Next/Previous/tapping another song, a seek-bar drag
+  or any seek, Save (the new loop takes over), the song completing, and
+  closing the editor (song keeps playing). When it ends the saved loop is
+  told where the playhead is, exactly like a manual seek (re-armed if before
+  Start, ended if past End). Preview moves the playhead; it does not go back
+  to where you were. Preview never writes to the database.
+  New: lib/domain/playback/preview_session.dart (pure Dart),
+  test/preview_session_test.dart.
+  Changed: lib/domain/playback/audio_handler.dart (previewRegion,
+  stopPreview, _finishPreview + one-line hooks in _endRepeat,
+  _onPositionChanged, applyLoopProfile, seek, skipToPrevious restart,
+  _onTrackCompleted), lib/providers/audio_handler_provider.dart (3 new
+  providers), loop_editor_sheet.dart, test/loop_editor_test.dart (6 new
+  tests; test screen made taller). No packages added.
+  The handler part cannot be unit-tested (needs a real player): iPhone only.
+- Was UNVERIFIED about 4-2 (owner reports it works): grabbing a handle with a finger
+  (grab radius is 28 px), dragging inside the bottom sheet without the sheet
+  moving, and the two time labels when the handles are very close together or
+  near the left/right edge.
+- Known 4-2 limitation: a long press on +/- does not auto-repeat.
 
 ## Tested
+- Phase 4-2 on the iPhone (handles, labels, +/- buttons, clamping): owner says
+  everything seems to be working.
 - Phase 4-1 on the iPhone (waveform for MP3 / M4A / WAV, cache on 2nd open,
   region highlight, playhead, error + Retry).
 - <CONFIRM: any Phase 3 checks from the list above that I have not done,
@@ -174,6 +211,8 @@ Retested on the iPhone: owner reports "everything seems to be working".
   section loop>.
 
 ## Next steps
-1. Ask for owner permission and go for Phase 4-2 on the iPhone; fix anything found. Then 4-3.
+1. Run `flutter test` and `flutter analyze` (record the real test count here:
+   <CONFIRM>), then test Phase 4-3 on the iPhone (checklist in the chat).
+   Fix anything found. Phase 4 is done after that.
 3. Phase 5 Auto Loop, Phase 6 polish (library views, queue, FR-043 entry point,
    FR-025 indicator), Phase 7 regression + performance.

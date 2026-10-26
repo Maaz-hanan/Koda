@@ -52,13 +52,42 @@ class _FakeLoader implements WaveformLoader {
   }
 }
 
-Widget _app(_FakeRepo repo, {_FakeLoader? loader}) => ProviderScope(
+/// Stand-in for the player's Preview. Records what the editor asked for.
+class _FakePreview {
+  _FakePreview({this.canStart = true});
+  bool canStart;
+  final List<List<Object>> starts = [];
+  int stops = 0;
+  bool? lastStopPause;
+}
+
+Widget _app(
+  _FakeRepo repo, {
+  _FakeLoader? loader,
+  _FakePreview? preview,
+  bool previewing = false,
+}) {
+  final fake = preview ?? _FakePreview();
+  return ProviderScope(
       overrides: [
         loopProfileRepositoryProvider.overrideWithValue(repo),
         // No real player in tests: applying a loop does nothing here.
         loopProfileApplierProvider.overrideWithValue((profile) async {}),
         waveformLoaderProvider.overrideWithValue(loader ?? _FakeLoader()),
         positionProvider.overrideWith((ref) => const Stream<Duration>.empty()),
+        loopPreviewStartProvider.overrideWithValue(({
+          required String songId,
+          required int startMs,
+          required int endMs,
+        }) async {
+          fake.starts.add([songId, startMs, endMs]);
+          return fake.canStart;
+        }),
+        loopPreviewStopProvider.overrideWithValue(({bool pause = true}) {
+          fake.stops++;
+          fake.lastStopPause = pause;
+        }),
+        loopPreviewingProvider.overrideWith((ref) => Stream<bool>.value(previewing)),
       ],
       child: MaterialApp(
         home: Builder(
@@ -79,8 +108,17 @@ Widget _app(_FakeRepo repo, {_FakeLoader? loader}) => ProviderScope(
         ),
       ),
     );
+}
+
+/// Text currently in a time field. (find.text would also match the waveform's
+/// handle labels, which show the same times.)
+String _field(WidgetTester tester, String key) =>
+    tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
 
 Future<void> _open(WidgetTester tester) async {
+  // A taller screen (800 x 1000 logical px) so the whole editor is visible.
+  tester.view.physicalSize = const Size(2400, 3000);
+  addTearDown(tester.view.reset);
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
 }
@@ -98,8 +136,8 @@ void main() {
     await tester.pumpWidget(_app(repo));
     await _open(tester);
 
-    expect(find.text('0:10'), findsOneWidget);
-    expect(find.text('0:20'), findsOneWidget);
+    expect(_field(tester, 'loop_start_field'), '0:10');
+    expect(_field(tester, 'loop_end_field'), '0:20');
   });
 
   testWidgets('saving a valid loop writes it and closes', (tester) async {
@@ -210,5 +248,176 @@ void main() {
 
     expect(loader.loadCalls, 2);
     expect(find.byType(WaveformView), findsOneWidget);
+  });
+
+  testWidgets('+/- buttons move a handle by 0.1 s and leave the other alone',
+      (tester) async {
+    await tester.pumpWidget(_app(_FakeRepo()));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_start_field')), '0:10');
+    await tester.enterText(find.byKey(const Key('loop_end_field')), '0:20');
+    await tester.tap(find.text('Infinite'));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('loop_start_plus')));
+    await tester.pump();
+    expect(_field(tester, 'loop_start_field'), '0:10.1');
+    expect(_field(tester, 'loop_end_field'), '0:20');
+
+    await tester.tap(find.byKey(const Key('loop_end_minus')));
+    await tester.pump();
+    expect(_field(tester, 'loop_start_field'), '0:10.1');
+    expect(_field(tester, 'loop_end_field'), '0:19.9');
+  });
+
+  testWidgets('the handles cannot cross: End stops 0.1 s after Start',
+      (tester) async {
+    await tester.pumpWidget(_app(_FakeRepo()));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_start_field')), '0:10');
+    await tester.enterText(find.byKey(const Key('loop_end_field')), '0:10.2');
+    await tester.tap(find.text('Infinite'));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('loop_end_minus')));
+    await tester.pump();
+    expect(_field(tester, 'loop_end_field'), '0:10.1');
+
+    await tester.tap(find.byKey(const Key('loop_end_minus')));
+    await tester.pump();
+    expect(_field(tester, 'loop_end_field'), '0:10.1'); // no further
+    expect(_field(tester, 'loop_start_field'), '0:10'); // Start unchanged
+  });
+
+  testWidgets('End cannot be nudged past the end of the song', (tester) async {
+    await tester.pumpWidget(_app(_FakeRepo()));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_end_field')), '0:59.95');
+    await tester.tap(find.byKey(const Key('loop_end_plus')));
+    await tester.pump();
+    expect(_field(tester, 'loop_end_field'), '1:00');
+
+    await tester.tap(find.byKey(const Key('loop_end_plus')));
+    await tester.pump();
+    expect(_field(tester, 'loop_end_field'), '1:00');
+  });
+
+  testWidgets('a nudge with unreadable text shows a message', (tester) async {
+    await tester.pumpWidget(_app(_FakeRepo()));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_start_field')), 'abc');
+    await tester.tap(find.byKey(const Key('loop_start_plus')));
+    await tester.pump();
+    expect(find.text('Enter times like 1:05 or 65.'), findsOneWidget);
+  });
+
+  testWidgets('nudged values are what gets saved', (tester) async {
+    final repo = _FakeRepo();
+    await tester.pumpWidget(_app(repo));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_start_field')), '0:10');
+    await tester.enterText(find.byKey(const Key('loop_end_field')), '0:20');
+    await tester.tap(find.text('Infinite'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('loop_start_plus')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('loop_save_button')));
+    await tester.pumpAndSettle();
+
+    expect(repo.saved['s1']!.loopStartMs, 10100);
+    expect(repo.saved['s1']!.loopEndMs, 20000);
+  });
+
+  testWidgets('Preview plays the unsaved fields, without saving anything',
+      (tester) async {
+    final repo = _FakeRepo();
+    final preview = _FakePreview();
+    await tester.pumpWidget(_app(repo, preview: preview));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_start_field')), '0:10');
+    await tester.enterText(find.byKey(const Key('loop_end_field')), '0:20');
+    await tester.tap(find.byKey(const Key('loop_preview_button')));
+    await tester.pumpAndSettle();
+
+    expect(preview.starts, [
+      ['s1', 10000, 20000]
+    ]);
+    expect(repo.saveCalls, 0);
+    expect(find.byType(LoopEditorSheet), findsOneWidget);
+  });
+
+  testWidgets('Preview with an invalid range shows a message and does not play',
+      (tester) async {
+    final preview = _FakePreview();
+    await tester.pumpWidget(_app(_FakeRepo(), preview: preview));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_start_field')), '0:30');
+    await tester.enterText(find.byKey(const Key('loop_end_field')), '0:10');
+    await tester.tap(find.byKey(const Key('loop_preview_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loop start must be before loop end.'), findsOneWidget);
+    expect(preview.starts, isEmpty);
+  });
+
+  testWidgets('Preview with unreadable text shows a message', (tester) async {
+    final preview = _FakePreview();
+    await tester.pumpWidget(_app(_FakeRepo(), preview: preview));
+    await _open(tester);
+
+    await tester.enterText(find.byKey(const Key('loop_end_field')), 'abc');
+    await tester.tap(find.byKey(const Key('loop_preview_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter times like 1:05 or 65.'), findsOneWidget);
+    expect(preview.starts, isEmpty);
+  });
+
+  testWidgets('if the song is not the playing one, Preview explains why',
+      (tester) async {
+    final preview = _FakePreview(canStart: false);
+    await tester.pumpWidget(_app(_FakeRepo(), preview: preview));
+    await _open(tester);
+
+    await tester.tap(find.byKey(const Key('loop_preview_button')));
+    await tester.pumpAndSettle();
+
+    expect(preview.starts.length, 1);
+    expect(find.textContaining('Preview only works'), findsOneWidget);
+  });
+
+  testWidgets('while previewing the button says Stop and pressing it stops',
+      (tester) async {
+    final preview = _FakePreview();
+    await tester.pumpWidget(_app(_FakeRepo(), preview: preview, previewing: true));
+    await _open(tester);
+
+    expect(find.text('Stop preview'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('loop_preview_button')));
+    await tester.pumpAndSettle();
+
+    expect(preview.stops, 1);
+    expect(preview.lastStopPause, isTrue);
+    expect(preview.starts, isEmpty);
+  });
+
+  testWidgets('closing the editor ends the preview but does not pause',
+      (tester) async {
+    final preview = _FakePreview();
+    await tester.pumpWidget(_app(_FakeRepo(), preview: preview));
+    await _open(tester);
+
+    await tester.tap(find.byKey(const Key('loop_cancel_button')));
+    await tester.pumpAndSettle();
+
+    expect(preview.stops, 1);
+    expect(preview.lastStopPause, isFalse);
   });
 }

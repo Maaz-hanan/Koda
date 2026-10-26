@@ -15,6 +15,7 @@ import '../loop/loop_mode.dart';
 import '../loop/section_loop_engine.dart';
 import '../loop/whole_song_repeat.dart';
 import 'playback_restore.dart';
+import 'preview_session.dart';
 import 'queue_manager.dart';
 
 /// The ONE owner of the audio player. [PRD §11]
@@ -49,6 +50,14 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
 
   /// Active loop mode (whole song or section loop).
   LoopMode _currentMode = LoopMode.off;
+
+  /// Non-null while the loop editor's Preview is playing. [PRD FR-029]
+  PreviewSession? _preview;
+  final StreamController<bool> _previewChanges =
+      StreamController<bool>.broadcast();
+
+  bool get isPreviewing => _preview != null;
+  Stream<bool> get previewingStream => _previewChanges.stream;
 
   final StreamController<LoopMode> _repeatChanges =
       StreamController<LoopMode>.broadcast();
@@ -90,6 +99,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   /// A different song is about to play, so whole-song repeat and section loop end.
   /// Call this BEFORE any await, so nothing stale can fire in between.
   void _endRepeat() {
+    _finishPreview(syncLoop: false);
     _repeat.onTrackChange();
     _sectionLoop.cancelSession();
     _setMode(LoopMode.off);
@@ -136,6 +146,17 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
       return;
     }
 
+    // During Preview only the preview watches the position; the saved loop
+    // is paused so the two cannot fight. [PRD §13 rule 3]
+    final preview = _preview;
+    if (preview != null) {
+      if (preview.onPosition(position.inMilliseconds, _generation) ==
+          PreviewAction.finished) {
+        _finishPreview(pause: true);
+      }
+      return;
+    }
+
     final action =
         _sectionLoop.onPosition(position.inMilliseconds, _generation);
     switch (action) {
@@ -176,6 +197,9 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     final song = _queueManager.current;
     if (song == null || song.id != profile.songId) return;
 
+    // A new loop was saved: any preview is over, the new loop takes charge.
+    _finishPreview(syncLoop: false);
+
     // Clear any active whole-song repeat
     _repeat.setMode(LoopMode.off);
 
@@ -195,6 +219,63 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     } else {
       _sectionLoop.cancelSession();
       _setMode(LoopMode.off);
+    }
+  }
+
+  /// Previews [startMs]..[endMs] of the CURRENT song: plays from 2 s before
+  /// [startMs] and pauses at [endMs]. Works on the unsaved values from the
+  /// editor and never changes the saved loop. Returns false if [songId] is not
+  /// the song that is loaded. [PRD FR-029]
+  Future<bool> previewRegion({
+    required String songId,
+    required int startMs,
+    required int endMs,
+  }) async {
+    final song = _queueManager.current;
+    if (song == null || song.id != songId || _loadedGeneration != _generation) {
+      return false;
+    }
+    if (startMs < 0 || endMs <= startMs) return false;
+
+    final generation = _generation;
+    final session = PreviewSession(
+      regionStartMs: startMs,
+      endMs: endMs,
+      trackGeneration: generation,
+    );
+    _preview = session;
+    _previewChanges.add(true);
+    try {
+      await _player.seek(Duration(milliseconds: session.playFromMs));
+    } catch (_) {
+      if (_preview == session) _finishPreview(syncLoop: false);
+      return false;
+    }
+    // Next / seek / another preview may have taken over while seeking.
+    if (generation != _generation || _preview != session) return true;
+    unawaited(_player.play());
+    return true;
+  }
+
+  /// Ends Preview. [pause] true (the Stop button) also pauses playback;
+  /// false (editor closed) lets the song carry on normally.
+  void stopPreview({bool pause = true}) => _finishPreview(pause: pause);
+
+  /// Leaves preview mode. With [syncLoop] the saved loop is told where
+  /// playback is now, exactly as after a manual seek (re-armed if before
+  /// Start, ended if past End), so it stays in a valid state. [PRD FR-013]
+  void _finishPreview({bool pause = false, bool syncLoop = true}) {
+    if (_preview == null) return;
+    _preview = null;
+    _previewChanges.add(false);
+    if (pause) unawaited(_player.pause());
+    if (syncLoop) {
+      _sectionLoop.onManualSeek(_player.position.inMilliseconds);
+      if (!_sectionLoop.hasActiveSession &&
+          (_currentMode == LoopMode.finiteSection ||
+              _currentMode == LoopMode.infiniteSection)) {
+        _setMode(LoopMode.off);
+      }
     }
   }
 
@@ -273,6 +354,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> seek(Duration position) async {
+    _finishPreview(syncLoop: false); // the normal seek rules below take over
     _sectionLoop.onManualSeek(position.inMilliseconds);
     if (!_sectionLoop.hasActiveSession &&
         (_currentMode == LoopMode.finiteSection ||
@@ -301,6 +383,7 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     // Like most players: if we're a few seconds in, restart the song first.
     if (_player.position > const Duration(seconds: 3) ||
         !_queueManager.hasPrevious) {
+      _finishPreview(syncLoop: false);
       _sectionLoop.onManualSeek(0);
       if (!_sectionLoop.hasActiveSession &&
           (_currentMode == LoopMode.finiteSection ||
@@ -388,6 +471,13 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     // Ignore a "completed" signal that belongs to a song that is no longer
     // the loaded one (stale callback).
     if (_queueManager.current == null || _loadedGeneration != _generation) {
+      return;
+    }
+
+    // The song ended while previewing a region at its very end: stop there
+    // instead of moving on to the next song.
+    if (_preview != null) {
+      _finishPreview(pause: true);
       return;
     }
 
