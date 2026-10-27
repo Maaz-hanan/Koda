@@ -7,8 +7,10 @@ import 'package:just_audio/just_audio.dart' hide LoopMode;
 import '../../core/storage_paths.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/loop_profile_dao.dart';
+import '../../data/database/song_dao.dart';
 import '../../data/models/loop_profile.dart';
 import '../../data/models/song.dart';
+import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/loop_profile_repository.dart';
 import '../../data/services/playback_persistence.dart';
 import '../loop/loop_mode.dart';
@@ -32,14 +34,17 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   LoopPlayerAudioHandler({
     PlaybackPersistence? persistence,
     LoopProfileRepository? loopProfiles,
+    LibraryRepository? library,
   })  : _persistence = persistence ?? PlaybackPersistence(),
         _loopProfiles = loopProfiles ??
-            LoopProfileRepository(LoopProfileDao(AppDatabase.instance)) {
+            LoopProfileRepository(LoopProfileDao(AppDatabase.instance)),
+        _library = library ?? LibraryRepository(SongDao(AppDatabase.instance)) {
     _ready = _init();
   }
 
   final PlaybackPersistence _persistence;
   final LoopProfileRepository _loopProfiles;
+  final LibraryRepository _library;
   final AudioPlayer _player = AudioPlayer();
   final QueueManager _queueManager = QueueManager();
 
@@ -59,6 +64,31 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
 
   bool get isPreviewing => _preview != null;
   Stream<bool> get previewingStream => _previewChanges.stream;
+
+  /// The generation (= the song load) whose "played" time is already saved,
+  /// so one load is recorded once, not on every pause / resume.
+  int _playRecordedGeneration = -1;
+  final StreamController<String> _songPlayed =
+      StreamController<String>.broadcast();
+
+  /// Emits a song's id after its "last played" time was saved, so the
+  /// library can reload. [PRD FR-005]
+  Stream<String> get songPlayedStream => _songPlayed.stream;
+
+  /// Saves "this song started playing now". Failure is ignored: a missing
+  /// "recently played" entry must never stop the music.
+  void _recordPlayed(Song song, int generation) {
+    if (_playRecordedGeneration == generation) return;
+    _playRecordedGeneration = generation;
+    unawaited(_markPlayed(song.id));
+  }
+
+  Future<void> _markPlayed(String songId) async {
+    try {
+      await _library.markPlayed(songId, DateTime.now().millisecondsSinceEpoch);
+      _songPlayed.add(songId);
+    } catch (_) {}
+  }
 
   /// What the Now Playing screen shows about the section loop (range,
   /// waiting / running, plays left). Null when there is no loop. [PRD FR-025]
@@ -211,6 +241,31 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     _queueManager.setQueue(songs, startIndex);
     queue.add(songs.map(_toMediaItem).toList());
     await _loadCurrentAndPlay();
+  }
+
+  /// "Play next": [song] plays right after the current song. [PRD FR-008]
+  Future<QueueAddResult> playSongNext(Song song) =>
+      _changeQueue(song, _queueManager.playNext);
+
+  /// "Add to queue": [song] goes to the end of the queue. [PRD FR-008]
+  Future<QueueAddResult> addSongToQueue(Song song) =>
+      _changeQueue(song, _queueManager.addToEnd);
+
+  Future<QueueAddResult> _changeQueue(
+    Song song,
+    QueueAddResult Function(Song) change,
+  ) async {
+    // Nothing queued yet: there is nothing to add to, so just play it.
+    if (_queueManager.songs.isEmpty) {
+      await playQueue([song], 0);
+      return QueueAddResult.started;
+    }
+    final result = change(song);
+    if (result == QueueAddResult.added || result == QueueAddResult.moved) {
+      queue.add(_queueManager.songs.map(_toMediaItem).toList());
+      await saveNow(); // the saved queue changed
+    }
+    return result;
   }
 
   /// Applies a newly saved or updated loop profile immediately if it belongs
@@ -368,9 +423,11 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> play() async {
-    if (_queueManager.current == null) return;
+    final song = _queueManager.current;
+    if (song == null) return;
     // play() finishes only when playback ends or pauses, so don't await it.
     unawaited(_player.play());
+    if (_loadedGeneration == _generation) _recordPlayed(song, _generation);
   }
 
   @override
@@ -400,6 +457,16 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     } else {
       await _finishQueue();
     }
+  }
+
+  /// Jumps to a song in the queue (tap in the queue view). Like Next, it
+  /// wins over every repeat or section-loop transition. [PRD FR-008, FR-022]
+  @override
+  Future<void> skipToQueueItem(int index) async {
+    if (_queueManager.current == null) return;
+    if (index < 0 || index >= _queueManager.songs.length) return;
+    _endRepeat();
+    if (_queueManager.moveTo(index)) await _loadCurrentAndPlay();
   }
 
   @override
@@ -485,7 +552,10 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
       _publishLoopStatus();
 
       await saveNow();
-      if (autoPlay) unawaited(_player.play());
+      if (autoPlay) {
+        unawaited(_player.play());
+        _recordPlayed(song, generation);
+      }
     } catch (_) {
       if (generation != _generation) return;
       _errors.add('Couldn\'t play "${song.title}". The file may be damaged.');

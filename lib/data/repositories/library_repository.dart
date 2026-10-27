@@ -19,6 +19,14 @@ class LibraryRepository {
 
   Future<void> updateSong(Song song) => _songDao.update(song);
 
+  /// Heart on / off. [PRD FR-005]
+  Future<void> setFavorite(String id, bool isFavorite) =>
+      _songDao.setFavorite(id, isFavorite);
+
+  /// Remembers when a song last started playing ("Recently Played").
+  Future<void> markPlayed(String id, int playedAtMs) =>
+      _songDao.setLastPlayed(id, playedAtMs);
+
   /// Removes the song from the library AND deletes its stored audio/artwork
   /// files. The UI must show a confirmation first. [PRD FR-006]
   /// The song's loop profile is removed automatically (ON DELETE CASCADE).

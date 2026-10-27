@@ -4,6 +4,11 @@
 > Ignore section 8 (FR-033 to FR-039), the "or use Auto Loop" line in 3.2, the
 > Auto Loop items in section 15 and the Auto Loop line in section 18. Phase 6
 > comes after Phase 4. Everything else in this document still applies.
+>
+> **Owner decision: the Albums and Artists views are REMOVED (FR-003).** The
+> Library has Songs, Playlists, Favorites and Recently Played only. Do not
+> rebuild Albums or Artists unless the owner asks. The owner also chose to
+> skip the accessibility pass and any lock-screen loop state.
 
 **Personal Music Player with Intelligent Section Looping**
 

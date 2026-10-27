@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format_duration.dart';
+import '../../data/models/song.dart';
 import '../../providers/audio_handler_provider.dart';
+import '../../providers/library_provider.dart';
 import '../shared/artwork_widget.dart';
+import '../playlists/playlist_actions.dart';
+import '../queue/queue_screen.dart';
+import '../shared/favorite_button.dart';
 import 'loop_button.dart';
 import 'loop_editor_sheet.dart';
 import 'loop_status_panel.dart';
@@ -53,6 +58,18 @@ class NowPlayingScreen extends ConsumerWidget {
     final handler = ref.read(audioHandlerProvider);
     final repeatMode = ref.watch(repeatModeProvider);
     final loopStatus = ref.watch(loopStatusProvider);
+    // The queue holds a copy of the song, so ask the library (always fresh)
+    // about this song: is it a favorite, and which Song to add to a playlist.
+    final librarySong = ref.watch(songsProvider).maybeWhen<Song?>(
+          data: (songs) {
+            for (final s in songs) {
+              if (s.id == item.id) return s;
+            }
+            return null;
+          },
+          orElse: () => null,
+        );
+    final isFavorite = librarySong?.isFavorite ?? false;
     final scheme = Theme.of(context).colorScheme;
     final artSize =
         (MediaQuery.sizeOf(context).width - 64).clamp(200.0, 360.0).toDouble();
@@ -74,6 +91,35 @@ class NowPlayingScreen extends ConsumerWidget {
         ),
         title: const Text('Now Playing'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.playlist_add),
+            tooltip: 'Add to playlist',
+            onPressed: librarySong == null
+                ? null
+                : () => showAddToPlaylistSheet(context, ref, librarySong),
+          ),
+          IconButton(
+            icon: const Icon(Icons.queue_music),
+            tooltip: 'Queue',
+            onPressed: () => QueueScreen.open(context),
+          ),
+          FavoriteButton(
+            isFavorite: isFavorite,
+            onChanged: (value) async {
+              try {
+                await ref
+                    .read(songsProvider.notifier)
+                    .setFavorite(item.id, value);
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Could not update favorite.')));
+                }
+              }
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

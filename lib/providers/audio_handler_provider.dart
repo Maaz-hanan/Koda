@@ -21,6 +21,16 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>(
   (ref) => ref.watch(audioHandlerProvider).mediaItem,
 );
 
+/// Fires with a song's id each time that song's "last played" time was saved.
+final songPlayedProvider = StreamProvider<String>(
+  (ref) => ref.watch(audioHandlerProvider).songPlayedStream,
+);
+
+/// The songs in the queue, in play order. [PRD FR-008]
+final queueProvider = StreamProvider<List<MediaItem>>(
+  (ref) => ref.watch(audioHandlerProvider).queue,
+);
+
 /// Current playback position, smoothly updated.
 final positionProvider = StreamProvider<Duration>(
   (ref) => AudioService.position,

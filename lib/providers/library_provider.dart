@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/song.dart';
 import '../data/services/import_service.dart';
+import 'playlist_provider.dart';
 import 'repository_providers.dart';
 
 final importServiceProvider = Provider<ImportService>(
@@ -16,6 +17,21 @@ class LibraryNotifier extends AsyncNotifier<List<Song>> {
 
   Future<void> _reload() async {
     state = AsyncData(await ref.read(libraryRepositoryProvider).getSongs());
+  }
+
+  /// Reloads the list from the database (e.g. after a song was played).
+  Future<void> refresh() => _reload();
+
+  /// Heart on / off for one song. Updates the screen straight away after the
+  /// database write succeeds. [PRD FR-005]
+  Future<void> setFavorite(String songId, bool isFavorite) async {
+    await ref.read(libraryRepositoryProvider).setFavorite(songId, isFavorite);
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData([
+      for (final s in current)
+        s.id == songId ? s.copyWith(isFavorite: isFavorite) : s,
+    ]);
   }
 
   Future<Song> importFile({
@@ -35,6 +51,10 @@ class LibraryNotifier extends AsyncNotifier<List<Song>> {
   Future<void> removeSong(Song song) async {
     await ref.read(libraryRepositoryProvider).removeSong(song);
     await _reload();
+    // The song also left every playlist (ON DELETE CASCADE): reload them.
+    try {
+      await ref.read(playlistsProvider.notifier).refresh();
+    } catch (_) {}
   }
 }
 

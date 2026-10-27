@@ -1,5 +1,44 @@
 import '../../data/models/song.dart';
 
+/// What happened when a song was added to the queue ("Play next" /
+/// "Add to queue"). [PRD FR-008]
+enum QueueAddResult {
+  /// The song was put into the queue.
+  added,
+
+  /// The song was already queued and was moved to the new place.
+  moved,
+
+  /// Nothing changed (already in the queue / already next).
+  unchanged,
+
+  /// It is the song playing right now; nothing changed.
+  isCurrent,
+
+  /// The queue was empty, so the song simply started playing.
+  /// (Decided by the audio handler, never returned by [QueueManager].)
+  started,
+}
+
+/// The text shown after "Play next" / "Add to queue". Pure so it is tested.
+String queueAddMessage(
+  QueueAddResult result, {
+  required bool playNext,
+  required String title,
+}) {
+  switch (result) {
+    case QueueAddResult.started:
+      return 'Playing "$title".';
+    case QueueAddResult.isCurrent:
+      return 'That song is playing now.';
+    case QueueAddResult.unchanged:
+      return playNext ? 'Already playing next.' : 'Already in the queue.';
+    case QueueAddResult.added:
+    case QueueAddResult.moved:
+      return playNext ? 'Will play next.' : 'Added to the queue.';
+  }
+}
+
 /// Pure bookkeeping for "which songs are queued and which one is current".
 /// No audio in here, so it can be unit-tested. [PRD FR-008]
 ///
@@ -34,6 +73,39 @@ class QueueManager {
     if (!hasNext) return false;
     _index++;
     return true;
+  }
+
+  /// Makes the song at [index] the current one (tap in the queue view).
+  /// Returns false, changing nothing, if [index] is outside the queue.
+  bool moveTo(int index) {
+    if (index < 0 || index >= _songs.length) return false;
+    _index = index;
+    return true;
+  }
+
+  /// "Play next": puts [song] right after the current song. A song can be in
+  /// the queue only ONCE, so a queued song is moved instead of duplicated.
+  QueueAddResult playNext(Song song) {
+    if (current?.id == song.id) return QueueAddResult.isCurrent;
+
+    final list = [..._songs];
+    final existing = list.indexWhere((s) => s.id == song.id);
+    if (existing >= 0) {
+      if (existing == _index + 1) return QueueAddResult.unchanged;
+      list.removeAt(existing);
+      if (existing < _index) _index--; // a song before the current one left
+    }
+    list.insert(_index + 1, song);
+    _songs = List.unmodifiable(list);
+    return existing >= 0 ? QueueAddResult.moved : QueueAddResult.added;
+  }
+
+  /// "Add to queue": puts [song] at the end. Already queued -> unchanged.
+  QueueAddResult addToEnd(Song song) {
+    if (current?.id == song.id) return QueueAddResult.isCurrent;
+    if (_songs.any((s) => s.id == song.id)) return QueueAddResult.unchanged;
+    _songs = List.unmodifiable([..._songs, song]);
+    return QueueAddResult.added;
   }
 
   bool moveToPrevious() {

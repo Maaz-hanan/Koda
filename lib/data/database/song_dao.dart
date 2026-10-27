@@ -33,6 +33,20 @@ class SongDao {
     await db.update(_table, song.toMap(), where: 'id = ?', whereArgs: [song.id]);
   }
 
+  /// Changes ONLY the favorite flag (never overwrites the rest of the row).
+  Future<void> setFavorite(String id, bool isFavorite) async {
+    final db = await _appDb.database;
+    await db.update(_table, {'is_favorite': isFavorite ? 1 : 0},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Changes ONLY last_played_at.
+  Future<void> setLastPlayed(String id, int playedAtMs) async {
+    final db = await _appDb.database;
+    await db.update(_table, {'last_played_at': playedAtMs},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<void> delete(String id) async {
     final db = await _appDb.database;
     await db.delete(_table, where: 'id = ?', whereArgs: [id]);

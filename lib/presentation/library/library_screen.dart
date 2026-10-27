@@ -2,17 +2,21 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/storage_paths.dart';
-import '../../data/models/song.dart';
 import '../../data/services/import_service.dart';
+import '../../data/models/playlist.dart';
+import '../../domain/library/library_views.dart';
+import '../../domain/library/playlist_rules.dart';
 import '../../domain/library/song_search.dart';
 import '../../providers/audio_handler_provider.dart';
 import '../../providers/library_provider.dart';
+import '../../providers/playlist_provider.dart';
 import '../../providers/search_provider.dart';
-import '../shared/artwork_widget.dart';
+import '../playlists/playlist_list_view.dart';
 import '../shared/mini_player.dart';
+import 'song_list_view.dart';
 
-/// Library: import, search, list, play, remove.
+/// Library: import, search, and four views: Songs, Playlists, Favorites,
+/// Recently Played. [PRD FR-003]
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
@@ -56,112 +60,100 @@ class LibraryScreen extends ConsumerWidget {
     _snack(context, buffer.toString().trim());
   }
 
-  /// Asks first, then removes. [PRD FR-006]
-  Future<void> _confirmAndRemove(
-    BuildContext context,
-    WidgetRef ref,
-    Song song,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove song?'),
-        content: Text(
-          '"${song.title}" will be removed from your library. Its imported '
-          'copy and any saved loop settings will be deleted.\n\n'
-          'Your original file in the Files app is not affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      // Stop playing it first: never delete a file that is being played.
-      await ref.read(audioHandlerProvider).removeFromQueue(song.id);
-      await ref.read(songsProvider.notifier).removeSong(song);
-      if (context.mounted) _snack(context, 'Removed "${song.title}".');
-    } catch (e) {
-      if (context.mounted) _snack(context, 'Could not remove the song: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final songs = ref.watch(songsProvider);
     final query = ref.watch(searchQueryProvider);
-    final currentId = ref.watch(currentMediaItemProvider).when<String?>(
-          data: (m) => m?.id,
-          loading: () => null,
-          error: (e, s) => null,
+    final playlistLibrary = ref.watch(playlistsProvider).maybeWhen<PlaylistLibrary>(
+          data: (v) => v,
+          orElse: () => const PlaylistLibrary.empty(),
         );
+
+    // A song just started playing: reload so "last played" is up to date.
+    ref.listen<AsyncValue<String>>(songPlayedProvider, (previous, next) {
+      next.whenData((_) => ref.read(songsProvider.notifier).refresh());
+    });
 
     // Show playback problems (e.g. a damaged file) as a message.
     ref.listen<AsyncValue<String>>(playbackErrorProvider, (previous, next) {
       next.whenData((message) => _snack(context, message));
     });
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Library'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Import music',
-            onPressed: () => _import(context, ref),
-          ),
-        ],
-      ),
-      bottomNavigationBar: const MiniPlayer(),
-      body: songs.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Could not load your library.\n$e',
-                textAlign: TextAlign.center),
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Library'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: 'Import music',
+              onPressed: () => _import(context, ref),
+            ),
+          ],
+          bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(text: 'Songs'),
+              Tab(text: 'Playlists'),
+              Tab(text: 'Favorites'),
+              Tab(text: 'Recently Played'),
+            ],
           ),
         ),
-        data: (all) {
-          if (all.isEmpty) {
-            return _EmptyState(onImport: () => _import(context, ref));
-          }
-          final shown = filterSongs(all, query);
-          return Column(
-            children: [
-              const _SearchField(),
-              Expanded(
-                child: shown.isEmpty
-                    ? _NoResults(query: query)
-                    : ListView.separated(
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        itemCount: shown.length,
-                        separatorBuilder: (context, index) =>
-                            const Divider(height: 1),
-                        itemBuilder: (context, i) => _SongTile(
-                          song: shown[i],
-                          isCurrent: shown[i].id == currentId,
-                          onTap: () => ref
-                              .read(audioHandlerProvider)
-                              .playQueue(shown, i),
-                          onRemove: () =>
-                              _confirmAndRemove(context, ref, shown[i]),
-                        ),
+        bottomNavigationBar: const MiniPlayer(),
+        body: songs.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Could not load your library.\n$e',
+                  textAlign: TextAlign.center),
+            ),
+          ),
+          data: (all) {
+            if (all.isEmpty) {
+              return _EmptyState(onImport: () => _import(context, ref));
+            }
+            final q = query.trim();
+            String noMatch(String what) => 'No $what match "$q".';
+
+            return Column(
+              children: [
+                const _SearchField(),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      SongListView(
+                        songs: filterSongs(all, query),
+                        emptyMessage: noMatch('songs'),
                       ),
-              ),
-            ],
-          );
-        },
+                      PlaylistListView(
+                        library: playlistLibrary,
+                        playlists:
+                            filterPlaylists(playlistLibrary.playlists, query),
+                        hasQuery: q.isNotEmpty,
+                      ),
+                      SongListView(
+                        songs: filterSongs(favoriteSongs(all), query),
+                        emptyMessage: q.isEmpty
+                            ? 'No favorites yet.\nTap the heart on a song to add it.'
+                            : noMatch('favorites'),
+                      ),
+                      SongListView(
+                        songs: filterSongs(recentlyPlayedSongs(all), query),
+                        emptyMessage: q.isEmpty
+                            ? 'Nothing played yet.\nSongs you play will show up here.'
+                            : noMatch('recent songs'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -215,25 +207,6 @@ class _SearchFieldState extends ConsumerState<_SearchField> {
   }
 }
 
-class _NoResults extends StatelessWidget {
-  const _NoResults({required this.query});
-  final String query;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Text(
-          'No songs match "${query.trim()}".',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-      ),
-    );
-  }
-}
-
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.onImport});
   final VoidCallback onImport;
@@ -266,62 +239,5 @@ class _EmptyState extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _SongTile extends StatelessWidget {
-  const _SongTile({
-    required this.song,
-    required this.isCurrent,
-    required this.onTap,
-    required this.onRemove,
-  });
-
-  final Song song;
-  final bool isCurrent;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      leading: ArtworkWidget(path: song.absoluteArtworkPath),
-      title: Text(
-        song.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: isCurrent
-            ? TextStyle(color: scheme.primary, fontWeight: FontWeight.w600)
-            : null,
-      ),
-      subtitle:
-          Text(song.displayArtist, maxLines: 1, overflow: TextOverflow.ellipsis),
-      onTap: onTap,
-      onLongPress: onRemove,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(_formatDuration(song.durationMs)),
-          PopupMenuButton<String>(
-            tooltip: 'More options',
-            onSelected: (_) => onRemove(),
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'remove', child: Text('Remove from library')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatDuration(int ms) {
-    if (ms <= 0) return '--:--';
-    final total = ms ~/ 1000;
-    final h = total ~/ 3600;
-    final m = (total % 3600) ~/ 60;
-    final s = total % 60;
-    final ss = s.toString().padLeft(2, '0');
-    return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$ss' : '$m:$ss';
   }
 }
