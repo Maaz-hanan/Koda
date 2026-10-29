@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format_duration.dart';
+import '../../core/haptics.dart';
 import '../../core/loop_time.dart';
 import '../../data/models/loop_profile.dart';
 import '../../domain/loop/loop_mode.dart';
@@ -190,6 +191,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
   }
 
   void _nudgeStart(int deltaMs) {
+    Haptics.tick();
     final start = parseLoopTime(_startController.text);
     if (start == null) {
       setState(() => _error = 'Enter times like 1:05 or 65.');
@@ -199,6 +201,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
   }
 
   void _nudgeEnd(int deltaMs) {
+    Haptics.tick();
     final end = parseLoopTime(_endController.text);
     if (end == null) {
       setState(() => _error = 'Enter times like 1:05 or 65.');
@@ -293,6 +296,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
       return;
     }
 
+    Haptics.light(); // saved
     // Saved. Now tell the player about it (no silent failures).
     try {
       await ref.read(loopProfileApplierProvider)(profile);
@@ -366,7 +370,10 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                       return Align(
                         child: OutlinedButton.icon(
                           key: const Key('loop_preview_button'),
-                          onPressed: () => _togglePreview(previewing),
+                          onPressed: () {
+                            Haptics.tick();
+                            _togglePreview(previewing);
+                          },
                           icon: Icon(
                               previewing ? Icons.stop : Icons.play_arrow),
                           label: Text(
@@ -412,7 +419,10 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                               tooltip: 'Fewer plays',
                               icon: const Icon(Icons.remove_circle_outline),
                               onPressed: _count > 1
-                                  ? () => setState(() => _count--)
+                                  ? () {
+                                      Haptics.tick();
+                                      setState(() => _count--);
+                                    }
                                   : null,
                             ),
                             Text('$_count',
@@ -421,7 +431,10 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                               tooltip: 'More plays',
                               icon: const Icon(Icons.add_circle_outline),
                               onPressed: _count < 99
-                                  ? () => setState(() => _count++)
+                                  ? () {
+                                      Haptics.tick();
+                                      setState(() => _count++);
+                                    }
                                   : null,
                             ),
                           ],

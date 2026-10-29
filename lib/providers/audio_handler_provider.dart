@@ -21,6 +21,20 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>(
   (ref) => ref.watch(audioHandlerProvider).mediaItem,
 );
 
+/// Is shuffle on? [PRD FR-008]
+class ShuffleNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final handler = ref.watch(audioHandlerProvider);
+    final sub = handler.shuffleStream.listen((on) => state = on);
+    ref.onDispose(sub.cancel);
+    return handler.shuffleEnabled;
+  }
+}
+
+final shuffleProvider =
+    NotifierProvider<ShuffleNotifier, bool>(ShuffleNotifier.new);
+
 /// Fires with a song's id each time that song's "last played" time was saved.
 final songPlayedProvider = StreamProvider<String>(
   (ref) => ref.watch(audioHandlerProvider).songPlayedStream,

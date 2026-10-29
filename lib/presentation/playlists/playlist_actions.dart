@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/haptics.dart';
 import '../../data/models/playlist.dart';
 import '../../data/models/song.dart';
 import '../../domain/library/playlist_rules.dart';
@@ -38,7 +39,9 @@ Future<Playlist?> createPlaylistWithPrompt(
   );
   if (name == null) return null;
   try {
-    return await notifier.create(name);
+    final created = await notifier.create(name);
+    Haptics.light();
+    return created;
   } catch (e) {
     _snack(messenger, 'Could not create the playlist: $e');
     return null;
@@ -77,6 +80,7 @@ Future<void> deletePlaylistWithConfirm(
   final navigator = Navigator.of(context);
   final notifier = ref.read(playlistsProvider.notifier);
   if (!await confirmDeletePlaylist(context, playlist.name)) return;
+  Haptics.medium(); // a deletion the user just confirmed
   try {
     await notifier.delete(playlist.id);
     navigator.pop();
@@ -97,6 +101,7 @@ Future<void> removeSongFromPlaylist(
   final notifier = ref.read(playlistsProvider.notifier);
   try {
     await notifier.removeSong(playlistId, song.id);
+    Haptics.light();
     _snack(messenger, 'Removed "${song.title}" from the playlist.');
   } catch (e) {
     _snack(messenger, 'Could not remove the song: $e');
@@ -132,6 +137,7 @@ class _AddToPlaylistSheet extends ConsumerWidget {
     final notifier = ref.read(playlistsProvider.notifier);
     try {
       final added = await notifier.addSong(playlist.id, song.id);
+      Haptics.light();
       navigator.pop();
       _snack(
         messenger,

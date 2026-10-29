@@ -1,0 +1,229 @@
+{
+  "profile": {
+    "name": "LoopPlayer x Apple Music (iOS 26) design profile",
+    "version": "1.0",
+    "target": "iPhone, dark mode only for now (tested on iPhone 13, 390 x 844 pt)",
+    "framework": "Flutter, Material 3 theme, NO new packages",
+    "fidelity": "INSPIRED BY Apple Music, not a pixel copy. Only restyle screens and features LoopPlayer already has.",
+    "measurements_note": "All sizes are in Flutter logical points (same as iOS pt). They were estimated by eye from the owner's screenshots (screenshot px / 3), so treat them as close, not exact. Colors are approximations too.",
+    "source_screenshots": [
+      "Home: huge bold title, horizontal carousels with rounded artwork, pure black background",
+      "Home with floating glass bottom bar: tab-bar pill + round search button, and above it a floating glass mini-player pill",
+      "Now Playing (paused): artwork-tinted dark background, grabber at top, smaller centered artwork, title/artist left, round star and ellipsis buttons right, thin progress bar, big bare white transport glyphs, small icon row at the bottom",
+      "Queue: small artwork + title on top, a row of pill buttons, 'Continue Playing' list with 48 pt artwork rows, progress and transport kept below",
+      "Lock screen: system-owned Now Playing widget (NOT styleable; it only shows what the app sends through audio_service)"
+    ]
+  },
+  "how_to_use_this_file": [
+    "UI work only. Do not change playback, loop engine, database or provider logic.",
+    "Work in the small steps listed in implementation_order; after each step the owner runs the app and reports back.",
+    "Read the current files before changing them. File names below come from STATUS.md; confirm them in the project.",
+    "Prefer one shared theme file and a few shared widgets (glass container, circle button, song row) over styling every screen separately.",
+    "Do not over-engineer: follow the 'must' list first, 'nice' only if cheap, never build the 'skip' list."
+  ],
+  "hard_rules": [
+    "Keep every existing behavior: tap/long-press on the Loop button, Next always wins, queue, favorites, playlists, import, search, remove with confirmation.",
+    "Keep existing widget Keys and visible button texts that tests use (e.g. loop_save_button, loop_cancel_button, loop_start_field, loop_end_field, loop_preview_button, loop_start_plus, 'Preview', 'Infinite'). Run flutter test after every step (owner last reported 162 passing) and fix tests only when a purely visual change broke them.",
+    "Do not put a Tooltip around the Loop button (its long-press competes with ours).",
+    "Do not add or remove packages without asking the owner. Use flutter/services HapticFeedback and dart:ui BackdropFilter, which need no package.",
+    "Use song.absoluteArtworkPath / song.absoluteFilePath for files, never raw stored paths.",
+    "Riverpod 3: use .when(...) on AsyncValue. Watch providers, never the raw player.",
+    "BackdropFilter is expensive: use it only on the mini player, bottom sheets and a few small buttons, never on every list row."
+  ],
+  "design_principles": [
+    "Content first: artwork and song titles are the stars; chrome is quiet, translucent and dark.",
+    "One accent color (Apple Music red/pink) used sparingly: active states, primary buttons, current song, favorites.",
+    "Big bold titles, generous spacing, rounded everything (continuous-corner feel).",
+    "Glass (blur + translucent fill + hairline highlight) for floating things: mini player, round icon buttons, sheets.",
+    "The loop features are LoopPlayer's identity: keep them visible but styled as native-looking Apple controls."
+  ],
+  "tokens": {
+    "color": {
+      "mode": "dark only",
+      "background": "#000000",
+      "surface": "#1C1C1E",
+      "surface_raised": "#2C2C2E",
+      "separator": "#38383A  (0.5 pt hairlines, inset from the text start in lists)",
+      "text_primary": "#FFFFFF",
+      "text_secondary": "rgba(235,235,245,0.60)",
+      "text_tertiary": "rgba(235,235,245,0.30)",
+      "accent": "#FA2D48  (Apple Music red/pink, approximate; define once as the ColorScheme primary)",
+      "favorite_on": "#FF3B30",
+      "destructive": "#FF453A",
+      "glass_fill": "rgba(255,255,255,0.10) over a blur",
+      "glass_fill_strong": "rgba(255,255,255,0.16)",
+      "glass_border": "rgba(255,255,255,0.18), 0.5 pt",
+      "chip_unselected": "rgba(255,255,255,0.12)",
+      "chip_selected": "rgba(255,255,255,0.88) fill with black text",
+      "progress_played": "rgba(255,255,255,0.85)",
+      "progress_track": "rgba(255,255,255,0.25)",
+      "loop_handle_start": "#2E9E4F  (keep: already tested)",
+      "loop_handle_end": "#D64545  (keep: already tested)",
+      "now_playing_fallback_gradient": [
+        "#4A3238",
+        "#241A1D"
+      ]
+    },
+    "typography": {
+      "font": "Platform default (San Francisco on iOS). Do NOT bundle a font.",
+      "large_title": "34 pt, bold, letter-spacing -0.4 (screen titles like Library)",
+      "section_title": "22 pt, bold",
+      "now_playing_title": "22 pt, bold",
+      "now_playing_artist": "18 pt, regular, text_secondary",
+      "row_title": "17 pt, medium (w500), 1 line, ellipsis",
+      "row_subtitle": "15 pt, regular, text_secondary, 1 line",
+      "caption": "12 pt, semibold, text_secondary (times, counts)",
+      "button_label": "16-17 pt, semibold"
+    },
+    "spacing": {
+      "page_margin": 20,
+      "section_gap": 28,
+      "row_height": 64,
+      "row_artwork": 48,
+      "list_text_inset": 76,
+      "min_touch_target": 44
+    },
+    "radius": {
+      "row_artwork": 6,
+      "card_artwork": 12,
+      "now_playing_artwork": 14,
+      "search_field": 12,
+      "pill_and_circle": "fully rounded (StadiumBorder / CircleBorder)",
+      "bottom_sheet_top": 28,
+      "dialog": 14,
+      "glass_mini_player": 30
+    },
+    "shadow": {
+      "now_playing_artwork": "black 35%, blur 30, offset y 12",
+      "mini_player": "black 25%, blur 20, offset y 6",
+      "rows_and_cards": "none (flat)"
+    },
+    "glass_recipe": {
+      "what": "Approximation of iOS 26 Liquid Glass. Flutter has no native version.",
+      "build": "ClipRRect(radius) -> BackdropFilter(ImageFilter.blur(sigmaX 24, sigmaY 24)) -> DecoratedBox(color glass_fill, border 0.5 pt glass_border) -> content",
+      "tip": "Make ONE reusable GlassContainer widget and reuse it. Add a very faint top-to-bottom white highlight gradient (0.10 -> 0.02) for depth."
+    },
+    "motion": {
+      "default_duration_ms": 250,
+      "curve": "Curves.easeOutCubic (or a spring-like easeOutBack only for the artwork scale)",
+      "page_transition": "keep current routes",
+      "avoid": "long or flashy animations"
+    },
+    "haptics": {
+      "chip_or_tab_change": "HapticFeedback.selectionClick()",
+      "heart_toggle": "HapticFeedback.lightImpact()",
+      "play_pause": "HapticFeedback.lightImpact()",
+      "loop_button_long_press": "HapticFeedback.mediumImpact()",
+      "note": "Optional and tiny; skip if it complicates tests."
+    }
+  },
+  "components": {
+    "GlassContainer": "Reusable blur + translucent fill + hairline border wrapper (see glass_recipe). Used by the mini player, circle buttons and the loop status capsule.",
+    "CircleIconButton": "44 pt glass circle, 22 pt icon, white. Used for heart, queue, +/- nudge buttons, Loop button. Active state: fill glass_fill_strong, icon accent.",
+    "PillChipRow": "Horizontally scrolling row of pill chips, 34 pt tall, 16 pt horizontal padding, 8 pt gap, 17 pt semibold. Selected = chip_selected + black text; unselected = chip_unselected + white text.",
+    "SongRow": "64 pt row. Leading 48 pt artwork (radius 6). Title 17 medium, subtitle 15 secondary. Trailing: duration (15 secondary), small heart (tertiary when off, favorite_on when on), '...' menu. Hairline separator inset 76. Current song: title in accent and a dim overlay with an animated/graphic_eq icon on the artwork.",
+    "ArtworkWidget": "Keep the existing widget. Fallback when there is no artwork: rounded square with a subtle gradient (#3A3A3C -> #1C1C1E) and a centered music-note icon in tertiary color.",
+    "SectionHeader": "22 pt bold, 20 pt side margin, 28 pt above.",
+    "PrimaryButton": "Filled accent, white 17 semibold label, stadium shape, 50 pt tall (44 minimum).",
+    "SecondaryButton": "Filled glass or tonal (white 12%), white label, stadium shape.",
+    "ProgressBar": "6 pt tall rounded track, played part progress_played, remaining progress_track. Thumb hidden normally; while dragging the bar grows to ~10 pt. Times in caption style below the bar, left = elapsed, right = total duration (PRD FR-007 asks for total; showing -remaining is optional).",
+    "EmptyState": "64 pt icon in tertiary, 20 pt bold title, secondary body text, one accent PrimaryButton (e.g. 'Import music').",
+    "Dialogs": "Rounded 14, dark surface_raised background, bold title, secondary body, destructive action in destructive color. Keep all existing confirmations."
+  },
+  "screens": {
+    "library": {
+      "files": "lib/presentation/library/library_screen.dart, song_list_view.dart (SongTile), group_list_view.dart, list_message.dart",
+      "header": "Large title 'Library' (34 pt bold) on a transparent flat app bar. Trailing: 44 pt glass circle with '+' in accent (import). Use SliverAppBar.large or a plain padded Text; keep it simple.",
+      "search": "Under the title: 40 pt pill-ish field (radius 12), fill white 12%, magnifier icon, hint text as today. Keep the shared search provider behavior.",
+      "sections": "Replace the top TabBar look with a PillChipRow containing the existing sections (Songs, Albums, Artists, Playlists, Favorites, Recently Played). Keep the same swipe/page behavior (TabBarView or PageView) and the same data/providers. If a restyled TabBar is easier, give it isScrollable: true, a pill indicator and no divider.",
+      "lists": "Songs, favorites, recents and album/artist/playlist detail lists use SongRow. Album and artist lists use a 56 pt row with 48 pt artwork (radius 6) or a circle for artists, name 17 medium, subtitle '12 songs' 15 secondary, chevron in tertiary.",
+      "background": "#000000",
+      "bottom": "List needs extra bottom padding (mini player height + 24) so the last row is not hidden behind the floating mini player. Use extendBody: true so lists scroll under the glass.",
+      "empty_and_no_results": "EmptyState component; keep existing texts."
+    },
+    "detail_screens": {
+      "files": "group_detail_screen.dart, PlaylistDetailScreen",
+      "layout": "Centered 200 pt artwork (radius 12, soft shadow; for artists use the first song's artwork or a circle), 22 pt bold name, 15 secondary subtitle, then two pill buttons side by side: 'Play all' (accent PrimaryButton style) and the existing menu as a secondary pill/circle. Then the SongRow list. Mini player floats at the bottom.",
+      "keep": "Rename / Delete playlist and 'Remove from playlist' behavior exactly as today."
+    },
+    "mini_player": {
+      "file": "lib/presentation/shared/mini_player.dart",
+      "style": "Floating GlassContainer pill: 12 pt side margins, 8 pt above the bottom safe area, 60 pt tall, radius 30. Left: 40 pt artwork (radius 8), then title 15 semibold and artist 13 secondary (1 line each). Right: play/pause glyph 28 pt and next glyph 26 pt, bare white icons (no filled circle), 44 pt touch targets.",
+      "progress": "The thin progress line at the top may be removed (Apple's has none) or kept very subtle at the pill's bottom edge.",
+      "tap": "Tap on artwork/title opens Now Playing as today.",
+      "hidden_when": "nothing is loaded (as today)."
+    },
+    "now_playing": {
+      "files": "lib/presentation/now_playing/now_playing_screen.dart, loop_button.dart, loop_status_panel.dart, shared/favorite_button.dart",
+      "background": "Full-screen vertical gradient from a dark tint of the artwork color to a darker version of it (see dynamic_artwork_background). Fallback: now_playing_fallback_gradient.",
+      "top": "Small grabber pill (36 x 5, white 35%) centered near the top. Remove the 'Now Playing' app-bar title. Keep a way to close: keep the down-chevron or support swipe-down; the grabber alone must not remove the existing close behavior.",
+      "artwork": "Centered, square, size = min(screen width - 48, 340) while playing; animated to 0.86x of that when paused (AnimatedScale, 300 ms). Radius 14, soft shadow.",
+      "title_row": "Left: title 22 bold (max 2 lines), artist 18 secondary. Right: 44 pt glass circle with the existing heart (red when favorite).",
+      "seek_bar": "ProgressBar component (existing seek logic unchanged: drag shows finger position, seek on release).",
+      "transport": "Three bare white glyphs, evenly spaced with ~56 pt gaps: previous (fast_rewind_rounded look, 44 pt), play/pause (60 pt, NO filled circle; keep the loading spinner state), next (fast_forward_rounded look, 44 pt). Same handlers and tooltips as today.",
+      "loop_status": "The existing LoopStatusPanel becomes a compact GlassContainer capsule (radius 20, ~48 pt tall) under the transport, only when a section loop exists: left 'A-B  1:05 - 1:20', middle 'Waiting - starts at 1:05' / 'Running - 3 left' / 'Running - infinity' in secondary text (accent for Running), right a small 'Edit loop' pill. Keep all the existing texts and states.",
+      "bottom_row": "Row of 44 pt glass circles near the bottom safe area: Loop button on the left (same widget, same tap/long-press; off = secondary icon, active = glass_fill_strong with accent icon and the existing badge: 1 / infinity / A-B), Queue button on the right (opens QueueScreen). Center stays empty.",
+      "do_not_add": "No volume slider, lyrics, AirPlay or shuffle (the app has none of these)."
+    },
+    "queue": {
+      "file": "lib/presentation/queue/queue_screen.dart",
+      "background": "Same artwork-tinted gradient as Now Playing for continuity.",
+      "header": "56 pt artwork (radius 8) + current title (17 bold) + artist (15 secondary), heart circle on the right.",
+      "list_title": "'Up Next' or the existing wording as a 22 pt bold SectionHeader.",
+      "rows": "SongRow style, 48 pt artwork. Current song: accent title + graphic_eq overlay and NO remove button (as today). Other rows keep the X as a small tertiary icon. Tap to jump stays as is.",
+      "empty": "Existing 'The queue is empty.' message in EmptyState style."
+    },
+    "loop_editor_sheet": {
+      "file": "lib/presentation/now_playing/loop_editor_sheet.dart (+ waveform_view.dart)",
+      "container": "Modal bottom sheet, surface #1C1C1E, top radius 28, grabber, 20 pt margins, still scrollable.",
+      "title": "'Custom loop' 22 pt bold.",
+      "mode_selector": "Same three options (Off / Finite / Infinite) as a pill segmented control: 40 pt tall, selected = accent fill with white text, unselected = chip_unselected.",
+      "waveform": "Container radius 16, fill white 6-8%, slim rounded bars. Region highlight in accent. Keep the green/red handles, flags and time labels already working. Playhead white.",
+      "time_fields": "Filled fields (white 8%), radius 12, no outline until focused (accent outline). The +/- buttons and 'Use current' become 44 pt glass circles / a small glass pill.",
+      "buttons": "Preview = SecondaryButton (play/stop icon, label 'Preview' / 'Stop preview'). Save = full-width accent PrimaryButton. Cancel = plain text button in secondary color.",
+      "errors": "Red (destructive) 13 pt text under the fields, as today."
+    }
+  },
+  "dynamic_artwork_background": {
+    "goal": "Now Playing and Queue backgrounds take a dark tint from the current artwork, like Apple Music.",
+    "no_package_method": "Load the artwork file with ResizeImage/Image.file to about 16 x 16, read pixels via dart:ui (toByteData rawRgba), average them (skip near-black/near-white), convert to HSL, clamp saturation to <= 0.45 and lightness to 0.20-0.28 for the top color, and ~0.10-0.14 for the bottom color. Cache the result per song id in memory. Animate color changes with TweenAnimationBuilder (400 ms).",
+    "fallback": "No artwork or any error -> now_playing_fallback_gradient. Never let a color failure break the screen.",
+    "package_note": "palette_generator would be easier but is a NEW package: ASK THE OWNER FIRST. Default to the no-package method."
+  },
+  "must_have": [
+    "Single theme file (colors, text styles, radii) applied in main.dart; black background, accent, flat app bars",
+    "GlassContainer + floating glass mini player",
+    "Library: large title, search field, pill chips, SongRow restyle, bottom padding for the floating player",
+    "Now Playing: gradient background, artwork + shadow, title row with heart, new seek bar, bare transport glyphs, loop status capsule, bottom row with Loop and Queue",
+    "Queue screen restyle",
+    "Loop editor sheet restyle (keeping Keys and behavior)"
+  ],
+  "nice_to_have_if_cheap": [
+    "Artwork scales down when paused",
+    "Haptics",
+    "Swipe-down to close Now Playing",
+    "Remaining-time label instead of total (only if the owner wants it; PRD says total duration)",
+    "Animated equalizer on the current song row"
+  ],
+  "skip": [
+    "Apple Home / New / Radio tabs, catalog, streaming, profile avatar, For You carousels",
+    "A bottom tab bar (six library sections do not fit a 5-item iOS bar; chips are the chosen design)",
+    "Lyrics, AirPlay, volume slider, shuffle, explicit badges, crossfade",
+    "Light theme",
+    "Lock screen styling (system-owned)",
+    "Accessibility pass (owner chose to skip it; just keep 44 pt touch targets where it costs nothing)"
+  ],
+  "implementation_order": [
+    "UI-1 Theme + tokens + GlassContainer + CircleIconButton (new files), apply theme in main.dart. Check the app still looks sane.",
+    "UI-2 Floating glass mini player + library bottom padding.",
+    "UI-3 Library screen: large title, search, pill chips, SongRow (and album/artist/playlist rows, detail screens).",
+    "UI-4 Now Playing: layout, gradient background (no-package color extraction), seek bar, transport, heart, loop status capsule, bottom row.",
+    "UI-5 Queue screen.",
+    "UI-6 Loop editor sheet + waveform container styling, dialogs, empty states, polish."
+  ],
+  "open_questions_for_agent_to_check": [
+    "STATUS.md says Albums and Artists were built and then REMOVED on purpose, but the 6-3 and 6-5 notes describe them as existing tabs. Open library_screen.dart to see which tabs really exist and build the chip row from the real list.",
+    "Confirm the exact file and class names used above (they come from STATUS.md, which may be slightly out of date).",
+    "If a style choice here conflicts with something already working on the owner's phone, keep the working behavior and tell the owner."
+  ]
+}

@@ -512,26 +512,229 @@ Retested on the iPhone: owner reports "everything seems to be working".
   the playlist -> it is at the end; with a 1-song playlist there is no
   reorder icon; on Now Playing tap the playlist_add icon -> pick a playlist
   -> "Added to ..." (and "Already in ..." the second time).
+- PHASE 7 RESULT: the owner completed PHASE7_CHECKLIST.md and reported "all
+  passed" (memory / battery numbers were not sent to Claude).
+- POLISH 1 (owner request after Phase 7): queue row alignment + live bars +
+  haptics. WRITTEN, NOT YET RUN by the owner (Claude could not run Flutter).
+  <CONFIRM: flutter test count / analyze / iPhone check>. No database change,
+  no new packages.
+  (a) Queue screen: the playing song's icon and the X buttons were different
+  widths (24 vs 48) so they did not line up; both now sit in the same 48x48
+  box (a test checks their centres match). The static graphic_eq icon is
+  replaced by EqualizerIcon (lib/presentation/shared/equalizer_icon.dart): 4
+  bars that move while the music plays, rest in a fixed pose when paused, and
+  stay still if iOS "Reduce Motion" is on. Pure bar-height maths:
+  equalizerBarHeights(t). QueueScreen watches playbackStateProvider for
+  "playing".
+  (b) Haptics: lib/core/haptics.dart, class Haptics with tick()
+  (selectionClick), light() (lightImpact), medium() (mediumImpact). It never
+  throws and never waits. Where each is used:
+    - Playlist reorder: medium when a row is picked up, a tick each time the
+      dragged row moves about one row (ESTIMATED from the finger's movement,
+      because Flutter's ReorderableListView has no "passed over a row"
+      callback; rows are fixed at 72 px via itemExtent for this), light on
+      drop; tick when entering / leaving reorder mode.
+    - Heart: light when added, tick when removed.
+    - Now Playing: light on play/pause/next/previous; tick on the Loop button
+      tap, medium on its long press (opens the editor), tick on "Edit loop".
+    - Mini player: light on play/pause/next.
+    - Queue screen: tick on jump, light on remove (X).
+    - Play next / Add to queue, Add to playlist, Create playlist, Remove from
+      playlist: light on success. Confirmed removal of a song from the library
+      or deleting a playlist: medium.
+    - Loop editor: tick on +/- 100 ms, count +/-, Preview; light on Save.
+      Waveform: tick when a handle is grabbed.
+  Files: NEW lib/core/haptics.dart, lib/presentation/shared/equalizer_icon.dart,
+  test/haptics_test.dart, test/equalizer_icon_test.dart. CHANGED
+  queue_screen.dart, playlist_detail_screen.dart, favorite_button.dart,
+  now_playing_screen.dart, mini_player.dart, song_actions.dart,
+  playlist_actions.dart, loop_editor_sheet.dart, waveform_view.dart,
+  test/queue_screen_test.dart (now looks for EqualizerIcon, adds the alignment
+  and animation tests).
+  iPhone checks (haptics only work on a real iPhone, not the simulator, and
+  not when the phone is on silent in some settings: check Settings > Sounds &
+  Haptics > System Haptics is ON): Queue: bars and X on one vertical line; bars
+  dance while playing, freeze on pause. Playlist reorder: firm tap on pick-up,
+  ticks as you drag across rows, soft tap on drop. Heart, play/pause, next,
+  Loop button, add to queue / playlist, editor +/- buttons all give a tap.
+  If any haptic feels too strong or too often, say which one: they are
+  one-line changes (swap tick/light/medium or remove the call).
+- POLISH 1 (queue alignment, live bars, haptics): the owner ran it and said
+  "it works".
+- SHUFFLE (owner request): DONE. Owner ran it with UI-1 and said everything
+  works.
+  What it does: shuffle ON mixes only the songs AFTER the current one (played
+  songs and the playing song stay); shuffle OFF puts the queue back in its
+  original order and keeps the same song playing. Songs removed while shuffled
+  stay removed; songs added meanwhile (Play next / Add to queue) go to the end
+  when shuffle is turned off. While shuffle is on, starting a new list (tapping
+  a song) mixes what comes after it. "Shuffle" buttons (Songs tab, playlist
+  screen) play the whole list in random order and turn shuffle on. A shuffle
+  toggle sits next to the Loop button on Now Playing (accent when on). The
+  shuffle ON/OFF flag is NOT saved: after a restart the queue keeps the order it
+  had but the toggle shows off.
+  How: QueueManager.shuffleUpcoming(Random) / setShuffledQueue / restoreOrder /
+  isShuffled (pure; setQueue clears the remembered order); handler:
+  setShuffle / toggleShuffle / playShuffled / shuffleEnabled / shuffleStream;
+  shuffleProvider (Notifier<bool>); widgets ShuffleButton (Now Playing) and
+  ShufflePlayButton (shared). No database change, no new packages.
+  Tests: test/shuffle_queue_test.dart (13).
+  iPhone checks: Songs tab -> Shuffle: a random song plays, the Queue screen
+  shows a mixed order; Now Playing shuffle toggle turns accent; toggle OFF ->
+  Queue is back in library order and the same song keeps playing (no restart);
+  with shuffle ON tap another song -> the songs after it are mixed; playlist
+  screen -> Shuffle; Play next / Add to queue still work; Next / Previous still
+  work; the Loop button and loops are unaffected.
+
+## UI REDESIGN (Apple Music iOS 26 inspired). THE PLAN.
+Source of truth: apple_music_design_profile.json (in the project root: read it
+before any UI step). It is "inspired by", not a pixel copy. Dark mode only.
+The owner's reference screenshots: Home with huge title + carousels + floating
+glass tab bar and mini player; Now Playing (tinted background, grabber, artwork
+that shrinks when paused, title row with round buttons, thin progress bar, big
+bare transport glyphs); Now Playing with the queue below ("Continue Playing"
+rows with drag handles and a row of pill buttons).
+RULES for every UI step (from the profile and the owner):
+- UI only: never change playback, the loop engine, the database or provider
+  logic (the shuffle feature above is the one allowed exception, already done).
+- Keep every existing behaviour and every widget Key / button text that tests
+  use (loop_save_button, loop_cancel_button, loop_start_field, loop_end_field,
+  loop_preview_button, loop_start_plus, 'Preview', 'Infinite', ...). Run
+  flutter test after each step; fix tests only when a purely visual change
+  broke them.
+- No Tooltip around the Loop button (its long press competes with ours).
+- No new packages without asking (use dart:ui BackdropFilter + flutter/services
+  HapticFeedback; artwork colour is extracted WITHOUT a package, see UI-4).
+- BackdropFilter is expensive: only on the mini player, bottom sheets and a few
+  small round buttons, NEVER on every list row.
+- Use song.absoluteArtworkPath / absoluteFilePath. Riverpod 3: use .when.
+- Use the tokens in lib/presentation/theme/app_theme.dart (AppColors, AppText,
+  AppSpacing, AppRadius): no hard-coded colours or sizes in screens.
+- Flutter 3.44 theme class names: DialogThemeData, CardThemeData,
+  TabBarThemeData, AppBarThemeData, InputDecorationThemeData (NOT the old
+  *Theme names).
+DECISIONS made with the owner (they override the profile where they differ):
+- Shuffle IS built (the profile said "no shuffle").
+- Apple Music buttons we do not have (crossfade / smooth transition, "continue
+  playing / infinite autoplay", lyrics, AirPlay, volume slider) are NOT built.
+  Where Apple has a row of pill buttons (Now Playing / Queue) we use OUR
+  features instead: Shuffle, Loop (the repeat-mode button), Edit loop (section
+  loop editor), Add to playlist.
+- No bottom tab bar (profile). The Library uses a row of pill chips for its REAL
+  sections: Songs, Playlists, Favorites, Recently Played (Albums and Artists
+  were removed by the owner).
+- No Home / New / Radio / profile avatar / streaming.
+- VOLUME SLIDER (owner request, DO NOT FORGET): the owner wants the volume
+  slider (speaker-low icon, slider, speaker-high icon) back, as Apple Music's
+  Now Playing has. Build it in UI-4 (Now Playing). just_audio's
+  player.setVolume(0..1) changes only the APP's volume relative to the phone's
+  volume; the phone's real (system) volume needs a NEW PACKAGE (for example
+  volume_controller), so ASK the owner before adding one. Default plan: app
+  volume via handler.setVolume + a provider (+ remember it), no package, and
+  tell the owner the difference. The profile's old "no volume" rule is
+  overridden by the owner.
+PHASES (one per zip; the owner tests each before the next):
+- UI-1 DONE (owner tested: works): theme file (colours, text styles, radii,
+  component themes: app bar, dialogs, sheets, snackbars, menus, text fields,
+  search bar, slider, buttons) applied in main.dart (dark only);
+  GlassContainer, CircleIconButton. Files: lib/presentation/theme/app_theme.dart,
+  lib/presentation/shared/glass_container.dart, circle_icon_button.dart,
+  shuffle_play_button.dart, lib/presentation/now_playing/shuffle_button.dart,
+  main.dart. Tests: test/ui_foundation_test.dart (13). The app should now be
+  black with red accents and look "sane" everywhere, with the old layouts.
+- UI-2 DONE (owner tested: works). What it does: the mini player is now a floating glass pill (GlassContainer,
+  60 pt tall, radius 30, 12 pt side margins, 8 pt above the bottom safe area,
+  soft shadow) with 40 pt artwork (radius 8), title 15 semibold, artist 13
+  secondary, bare play/pause and next icons. The thin progress line was removed
+  (Apple has none). Tap artwork/title -> Now Playing (GestureDetector, no
+  ripple). Nothing is drawn when no song is loaded. Screens that show it
+  (library_screen, playlist_detail_screen) now use Scaffold(extendBody: true) so
+  lists scroll UNDER the glass and Flutter automatically pads the last row
+  clear of the pill (the body's MediaQuery bottom padding becomes the height of
+  the bottomNavigationBar). Playlist reorder list passes that padding
+  explicitly. The mini player reads the audio handler only inside button
+  callbacks (so it can be tested). RULE for any new screen with a list + mini
+  player: extendBody: true + bottomNavigationBar: const MiniPlayer().
+  Files: lib/presentation/shared/mini_player.dart (rewritten),
+  library_screen.dart, playlist_detail_screen.dart. Tests:
+  test/mini_player_test.dart (7: hidden without a song, 60 pt pill with 12 pt
+  margins, title/artist/Unknown Artist, Play vs Pause, last list row stays
+  clear of the pill, full height without a song).
+  iPhone checks: play a song -> a floating rounded glass pill hovers above the
+  bottom edge with a gap on both sides and below; rows scroll under it
+  (blurred) and the LAST row can be scrolled fully above it; play/pause and next
+  work; tapping the artwork/title opens Now Playing; no pill when nothing is
+  loaded and the last row then clears the home indicator; same on a playlist
+  screen, also in reorder mode; snackbars still show above the pill.
+- UI-3 WRITTEN, NOT YET RUN by the owner (Claude could not run Flutter).
+  <CONFIRM: flutter test count / analyze / iPhone check>. No database change,
+  no new packages, no behaviour change (providers, search, import, remove,
+  hearts, queue actions, playlist actions all untouched).
+  What it does: LIBRARY screen: no AppBar any more; a large "Library" title
+  (34 pt bold) with a glass "+" import button (CircleIconButton, accent icon,
+  tooltip 'Import music'); the search field (40 pt, radius 12, same shared
+  search provider, same hint); a PillChipRow (Songs, Playlists, Favorites,
+  Recently Played) that follows the swipe between pages (it listens to the
+  TabController animation) and moves the pages when tapped (animateTo); the
+  selected chip scrolls into view. Same four TabBarView pages, "Shuffle" pill
+  still above the Songs list. AnnotatedRegion keeps the status bar icons light.
+  SONG ROW (SongTile): 64 pt, 48 pt artwork (radius 6), title 17 medium,
+  subtitle 15 secondary, then duration, a small grey heart (red when on,
+  FavoriteButton(compact: true)) and a "..." menu (same items as before).
+  Current song: accent title + dark veil with the EqualizerIcon bars over its
+  artwork (they move only while playing). Inset hairline separators (indent
+  76). SongListView got an optional header (scrolls with the rows), emptyIcon,
+  and watches play/pause with select() so lists do not rebuild on every state
+  update. ListMessage: first line bold 20, rest 15 secondary, optional icon.
+  New EmptyState widget (64 pt icon, bold title, text, accent button) used for
+  an empty library. PLAYLISTS tab: rows with the artwork of the playlist's
+  first song, name, "N songs", chevron; "New playlist" row in accent.
+  PLAYLIST SCREEN: the AppBar title is gone (the name is in the header); the
+  list starts with a header: 200 pt artwork (radius 12, soft shadow), name 22
+  bold, "N songs", then "Play all" (accent) and "Shuffle" pills. The reorder
+  icon and the Rename / Delete menu stay in the app bar. Reorder mode shows only
+  the hint + drag list (no header) with the same haptics as before.
+  Files: NEW lib/presentation/shared/pill_chip_row.dart, empty_state.dart.
+  CHANGED lib/presentation/library/library_screen.dart (rewritten, _import and
+  _snack kept), song_list_view.dart, list_message.dart,
+  lib/presentation/shared/favorite_button.dart (compact option; heart red is
+  now AppColors.favoriteOn), lib/presentation/playlists/playlist_list_view.dart
+  (allSongs param, optional), playlist_detail_screen.dart.
+  Tests: NEW test/pill_chip_row_test.dart (5), test/library_widgets_test.dart
+  (15: SongTile, compact heart, EmptyState, ListMessage). The existing
+  playlist / queue / favorite tests were kept and should still pass.
+  iPhone checks: big "Library" title with a glass + button; search under it;
+  4 pill chips, the selected one light with black text; swipe the pages ->
+  the chip follows (and scrolls into view for Recently Played); tap a chip ->
+  the page changes; rows: 48 pt artwork, duration, small grey heart, "..."
+  menu; the playing song has a red title and moving bars on its artwork (bars
+  freeze on pause); inset hairlines; empty tabs show an icon + title + text;
+  empty library shows the icon + 'Import music' button; Playlists tab: artwork
+  thumbnails; open a playlist -> big artwork, name, count, Play all + Shuffle,
+  songs below, scrolls as one page; reorder mode still works; last rows scroll
+  above the floating mini player; play/shuffle/queue actions all still work.
+- UI-4: Now Playing: artwork-tinted gradient background (dart:ui average colour
+  of a 16x16 artwork, HSL clamp, cached per song id, fallback gradient), grabber,
+  artwork scaling to 0.86 when paused, title row with glass heart, ProgressBar
+  (6 pt, grows while dragging; existing seek logic unchanged), bare transport
+  glyphs, loop status capsule (glass) with 'Edit loop' pill, bottom row of glass
+  circles: Shuffle, Loop button (same widget, same tap/long press), Add to
+  playlist, Queue. Keep a way to close (down chevron / swipe down).
+- UI-5: Queue screen: same tinted background, header (56 pt artwork, title,
+  artist, heart), our pill row (Shuffle, Loop, Edit loop, Add to playlist),
+  "Up Next" section header, SongRow-style rows (current = accent + equalizer, no
+  X; others keep the small X), same tap-to-jump.
+- UI-6: Loop editor sheet + waveform container (rounded, accent region, keep
+  green/red handles and all Keys), pill segmented mode selector, filled time
+  fields, glass +/- buttons, accent Save, dialogs, final polish and a full
+  regression pass (PHASE7_CHECKLIST.md again).
 
 ## Next steps
-1. PHASE 6 IS COMPLETE (6-1 .. 6-7, all owner-tested). Current Library tabs:
-   Songs, Playlists, Favorites, Recently Played. Database is version 2.
-   Suggested git commit: "Phase 6 complete: loop indicator, favorites, recents,
-   queue view, playlists, play next / add to queue, playlist reorder".
-2. PHASE 7 (IN PROGRESS, owner's turn): regression + performance on the real
-   iPhone. The owner works through PHASE7_CHECKLIST.md and pastes any FAILING
-   line (with what happened) back. Claude then fixes only what fails, in small
-   steps, and does not add features. 
-   tick <CONFIRM: checklist results, memory MB,
-   battery % after 30 min>.
-3. When the checklist passes, the app meets PRD section 18 "Definition of Done"
-   for personal use, minus the dropped Auto Loop. Remember the free Apple ID
-   build expires after ~7 days: just rebuild with `flutter run -d <iPhone ID>`.
-4. Skipped by the owner, do NOT build unless asked: tighter loop-end timing,
+1. Owner tests UI-3 (Library). Then Claude does UI-4 (Now Playing, INCLUDING
+   THE VOLUME SLIDER), UI-5 (Queue), UI-6 (loop editor + polish), ONE phase
+   per zip, updating this file each time.
+2. Skipped by the owner, do NOT build unless asked: tighter loop-end timing,
    lock-screen loop state, accessibility pass, Auto Loop (Phase 5),
-   Albums/Artists tabs. Still optional if asked: write a missing song duration
-   back to the database.
-
-
-   ## PHASE7 COMPLETE!!!!!!
-   WOOOOHOOOOO, THE APPS CORE FUNCTIONS ARE WORKING, THANK YOU FOR YOUR HARDWORK, THE UI/UX IS LEFT WHICH WE WILL BE DOING NOW AND THEN RELEASE IT FOR ME TO USE.(BY OWNER)
+   Albums/Artists tabs, crossfade / continue-playing / lyrics / AirPlay.
+   (Volume is NOT skipped any more: see the UI decisions.)
+   Still optional if asked: write a missing song duration back to the database.

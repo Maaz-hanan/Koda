@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format_duration.dart';
+import '../../core/haptics.dart';
 import '../../data/models/song.dart';
 import '../../providers/audio_handler_provider.dart';
 import '../../providers/library_provider.dart';
@@ -13,6 +14,7 @@ import '../shared/favorite_button.dart';
 import 'loop_button.dart';
 import 'loop_editor_sheet.dart';
 import 'loop_status_panel.dart';
+import 'shuffle_button.dart';
 
 /// Full-screen player. [PRD FR-007, FR-040]
 ///
@@ -58,6 +60,7 @@ class NowPlayingScreen extends ConsumerWidget {
     final handler = ref.read(audioHandlerProvider);
     final repeatMode = ref.watch(repeatModeProvider);
     final loopStatus = ref.watch(loopStatusProvider);
+    final shuffleOn = ref.watch(shuffleProvider);
     // The queue holds a copy of the song, so ask the library (always fresh)
     // about this song: is it a favorite, and which Song to add to a playlist.
     final librarySong = ref.watch(songsProvider).maybeWhen<Song?>(
@@ -164,7 +167,10 @@ class NowPlayingScreen extends ConsumerWidget {
                     iconSize: 44,
                     tooltip: 'Previous song',
                     icon: const Icon(Icons.skip_previous),
-                    onPressed: handler.skipToPrevious,
+                    onPressed: () {
+                      Haptics.light();
+                      handler.skipToPrevious();
+                    },
                   ),
                   SizedBox(
                     width: 72,
@@ -175,25 +181,56 @@ class NowPlayingScreen extends ConsumerWidget {
                             iconSize: 40,
                             tooltip: playing ? 'Pause' : 'Play',
                             icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                            onPressed: playing ? handler.pause : handler.play,
+                            onPressed: () {
+                              Haptics.light();
+                              playing ? handler.pause() : handler.play();
+                            },
                           ),
                   ),
                   IconButton(
                     iconSize: 44,
                     tooltip: 'Next song',
                     icon: const Icon(Icons.skip_next),
-                    onPressed: handler.skipToNext,
+                    onPressed: () {
+                      Haptics.light();
+                      handler.skipToNext();
+                    },
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              LoopButton(
-                mode: repeatMode,
-                onTap: handler.cycleRepeatMode,
-                onLongPress: openEditor,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ShuffleButton(
+                    isOn: shuffleOn,
+                    onPressed: () {
+                      Haptics.tick();
+                      handler.toggleShuffle();
+                    },
+                  ),
+                  const SizedBox(width: 20),
+                  LoopButton(
+                    mode: repeatMode,
+                    onTap: () {
+                      Haptics.tick();
+                      handler.cycleRepeatMode();
+                    },
+                    onLongPress: () {
+                      Haptics.medium();
+                      openEditor();
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              LoopStatusPanel(status: loopStatus, onEdit: openEditor),
+              LoopStatusPanel(
+                status: loopStatus,
+                onEdit: () {
+                  Haptics.tick();
+                  openEditor();
+                },
+              ),
               const SizedBox(height: 32),
             ],
           ),

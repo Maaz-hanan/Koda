@@ -4,10 +4,12 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/haptics.dart';
 import '../../domain/playback/queue_position.dart';
 import '../../providers/audio_handler_provider.dart';
 import '../library/list_message.dart';
 import '../shared/artwork_widget.dart';
+import '../shared/equalizer_icon.dart';
 
 /// The queue: every song in play order. Tap a song to jump to it, tap the
 /// X to take it out of the queue. [PRD FR-008, FR-045]
@@ -66,6 +68,10 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
           data: (m) => m?.id,
           orElse: () => null,
         );
+    final playing = ref.watch(playbackStateProvider).maybeWhen<bool>(
+          data: (s) => s.playing,
+          orElse: () => false,
+        );
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -92,20 +98,32 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                   ),
                   subtitle: Text(item.artist ?? 'Unknown Artist',
                       maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: isCurrent
-                      ? Icon(Icons.graphic_eq,
-                          color: scheme.primary, semanticLabel: 'Now playing')
-                      : IconButton(
-                          icon: const Icon(Icons.close),
-                          tooltip: 'Remove from queue',
-                          onPressed: () => ref
-                              .read(audioHandlerProvider)
-                              .removeFromQueue(item.id),
-                        ),
+                  // Both the moving bars and the X sit in the SAME 48 x 48
+                  // box, so they line up exactly.
+                  trailing: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: isCurrent
+                          ? EqualizerIcon(animating: playing, color: scheme.primary)
+                          : IconButton(
+                              icon: const Icon(Icons.close),
+                              tooltip: 'Remove from queue',
+                              onPressed: () {
+                                Haptics.light();
+                                ref
+                                    .read(audioHandlerProvider)
+                                    .removeFromQueue(item.id);
+                              },
+                            ),
+                    ),
+                  ),
                   onTap: isCurrent
                       ? null
-                      : () =>
-                          ref.read(audioHandlerProvider).skipToQueueItem(i),
+                      : () {
+                          Haptics.tick();
+                          ref.read(audioHandlerProvider).skipToQueueItem(i);
+                        },
                 );
               },
             ),

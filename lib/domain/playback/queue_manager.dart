@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../data/models/song.dart';
 
 /// What happened when a song was added to the queue ("Play next" /
@@ -49,6 +51,10 @@ class QueueManager {
   List<Song> _songs = const [];
   int _index = -1;
 
+  /// The queue as it was before shuffling (null = not shuffled), so that
+  /// turning shuffle off can put the songs back in their old order.
+  List<Song>? _unshuffled;
+
   List<Song> get songs => _songs;
 
   /// Index of the current song, or -1 if nothing is current.
@@ -61,12 +67,62 @@ class QueueManager {
   bool get hasPrevious => _index > 0;
 
   void setQueue(List<Song> songs, int startIndex) {
+    _unshuffled = null; // a brand-new queue starts in its own order
     _songs = List.unmodifiable(songs);
     if (songs.isEmpty) {
       _index = -1;
     } else {
       _index = startIndex.clamp(0, songs.length - 1).toInt();
     }
+  }
+
+  /// True while the queue is in shuffled order. [PRD FR-008]
+  bool get isShuffled => _unshuffled != null;
+
+  /// Shuffle: mixes the songs AFTER the current one. The songs before it
+  /// (already played) and the current song stay where they are. The first
+  /// original order is remembered, so shuffling twice still restores the
+  /// real original order.
+  void shuffleUpcoming(math.Random random) {
+    _unshuffled ??= List.of(_songs);
+    final head = _songs.take(_index + 1).toList();
+    final tail = _songs.skip(_index + 1).toList()..shuffle(random);
+    _songs = List.unmodifiable([...head, ...tail]);
+  }
+
+  /// "Shuffle" on a whole list: all of [songs] in random order, starting at
+  /// the first one. The given order is remembered for [restoreOrder].
+  void setShuffledQueue(List<Song> songs, math.Random random) {
+    if (songs.isEmpty) {
+      setQueue(songs, 0);
+      return;
+    }
+    _songs = List.unmodifiable(List.of(songs)..shuffle(random));
+    _index = 0;
+    _unshuffled = List.of(songs);
+  }
+
+  /// Shuffle off: puts the songs back in their original order and keeps the
+  /// current song playing. Songs removed while shuffled stay removed; songs
+  /// added while shuffled (Play next / Add to queue) go to the end.
+  void restoreOrder() {
+    final original = _unshuffled;
+    if (original == null) return;
+    final currentId = current?.id;
+    final inQueue = {for (final s in _songs) s.id: s};
+
+    final restored = <Song>[
+      for (final s in original)
+        if (inQueue.containsKey(s.id)) inQueue[s.id]!,
+    ];
+    final restoredIds = {for (final s in restored) s.id};
+    restored.addAll(_songs.where((s) => !restoredIds.contains(s.id)));
+
+    _songs = List.unmodifiable(restored);
+    _index = currentId == null
+        ? -1
+        : restored.indexWhere((s) => s.id == currentId);
+    _unshuffled = null;
   }
 
   bool moveToNext() {

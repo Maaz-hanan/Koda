@@ -8,6 +8,7 @@ import 'data/database/song_dao.dart';
 import 'data/repositories/library_repository.dart';
 import 'domain/playback/audio_handler.dart';
 import 'presentation/library/library_screen.dart';
+import 'presentation/theme/app_theme.dart';
 import 'providers/audio_handler_provider.dart';
 
 // Phase 1C-3: audio engine, mini-player, Now Playing, save/restore last song.
@@ -83,13 +84,11 @@ class _LoopPlayerAppState extends State<LoopPlayerApp>
     return MaterialApp(
       title: 'LoopPlayer',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A1A2E),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      // Dark only for now. All colors, text styles and corner radii live in
+      // presentation/theme/app_theme.dart.
+      theme: buildAppTheme(),
+      darkTheme: buildAppTheme(),
+      themeMode: ThemeMode.dark,
       home: const LibraryScreen(),
     );
   }

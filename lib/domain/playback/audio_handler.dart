@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
@@ -239,7 +240,52 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     if (songs.isEmpty) return;
     _endRepeat();
     _queueManager.setQueue(songs, startIndex);
-    queue.add(songs.map(_toMediaItem).toList());
+    // Shuffle stays on when a new list is started: mix what comes next.
+    if (_shuffleOn) _queueManager.shuffleUpcoming(_random);
+    queue.add(_queueManager.songs.map(_toMediaItem).toList());
+    await _loadCurrentAndPlay();
+  }
+
+  // ---- Shuffle [PRD FR-008] ----
+
+  final math.Random _random = math.Random();
+  bool _shuffleOn = false;
+  final StreamController<bool> _shuffleChanges =
+      StreamController<bool>.broadcast();
+
+  bool get shuffleEnabled => _shuffleOn;
+  Stream<bool> get shuffleStream => _shuffleChanges.stream;
+
+  void _setShuffleFlag(bool on) {
+    if (_shuffleOn == on) return;
+    _shuffleOn = on;
+    _shuffleChanges.add(on);
+  }
+
+  /// Shuffle on: mixes the songs after the current one. Off: puts the queue
+  /// back in its original order. The song that is playing is never touched.
+  Future<void> setShuffle(bool on) async {
+    _setShuffleFlag(on);
+    if (_queueManager.songs.isEmpty) return;
+    if (on) {
+      _queueManager.shuffleUpcoming(_random);
+    } else {
+      _queueManager.restoreOrder();
+    }
+    queue.add(_queueManager.songs.map(_toMediaItem).toList());
+    await saveNow(); // the saved queue order changed
+  }
+
+  Future<void> toggleShuffle() => setShuffle(!_shuffleOn);
+
+  /// The "Shuffle" buttons: plays all of [songs] in random order and turns
+  /// shuffle on.
+  Future<void> playShuffled(List<Song> songs) async {
+    if (songs.isEmpty) return;
+    _setShuffleFlag(true);
+    _endRepeat();
+    _queueManager.setShuffledQueue(songs, _random);
+    queue.add(_queueManager.songs.map(_toMediaItem).toList());
     await _loadCurrentAndPlay();
   }
 

@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/storage_paths.dart';
 import '../../data/models/playlist.dart';
+import '../../data/models/song.dart';
 import '../../domain/library/playlist_rules.dart';
+import '../shared/artwork_widget.dart';
+import '../theme/app_theme.dart';
 import 'playlist_actions.dart';
 import 'playlist_detail_screen.dart';
 
-/// The Playlists tab: "New playlist" on top, then one row per playlist.
-/// [PRD FR-003]
+/// The Playlists tab: "New playlist" on top, then one row per playlist with
+/// the artwork of its first song. [PRD FR-003]
 class PlaylistListView extends ConsumerWidget {
   const PlaylistListView({
     super.key,
     required this.library,
     required this.playlists,
     required this.hasQuery,
+    this.allSongs = const [],
   });
 
   /// Source of the song counts.
@@ -24,27 +29,49 @@ class PlaylistListView extends ConsumerWidget {
 
   final bool hasQuery;
 
+  /// All songs of the library: used to find each playlist's first artwork.
+  final List<Song> allSongs;
+
+  static const _separator = Divider(
+    height: 0.5,
+    thickness: 0.5,
+    indent: AppSpacing.listTextInset,
+  );
+
+  /// The artwork of the first song of [playlistId] that has one, or null.
+  String? _artworkFor(String playlistId) {
+    for (final song in songsForIds(library.idsOf(playlistId), allSongs)) {
+      if (song.artworkPath != null) return song.absoluteArtworkPath;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
         ListTile(
+          minTileHeight: 56,
+          minVerticalPadding: 4,
+          contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.pageMargin),
           leading: Container(
-            width: 48,
-            height: 48,
+            width: AppSpacing.rowArtwork,
+            height: AppSpacing.rowArtwork,
             decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.surfaceRaised,
+              borderRadius: BorderRadius.circular(AppRadius.rowArtwork),
             ),
-            child: Icon(Icons.add, color: scheme.onPrimaryContainer),
+            child: const Icon(Icons.add, color: AppColors.accent),
           ),
-          title: const Text('New playlist'),
+          title: const Text(
+            'New playlist',
+            style: TextStyle(color: AppColors.accent),
+          ),
           onTap: () => createPlaylistWithPrompt(context, ref),
         ),
-        const Divider(height: 1),
+        _separator,
         if (playlists.isEmpty)
           Padding(
             padding: const EdgeInsets.all(32),
@@ -53,26 +80,27 @@ class PlaylistListView extends ConsumerWidget {
                   ? 'No playlists match your search.'
                   : 'No playlists yet.\nCreate one to group your songs.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant),
+              style: AppText.rowSubtitle,
             ),
           ),
         for (final p in playlists) ...[
           ListTile(
-            leading: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.queue_music, color: scheme.onSurfaceVariant),
+            minTileHeight: 56,
+            minVerticalPadding: 4,
+            contentPadding: const EdgeInsets.only(
+                left: AppSpacing.pageMargin, right: 12),
+            leading: ArtworkWidget(
+              path: _artworkFor(p.id),
+              size: AppSpacing.rowArtwork,
+              radius: AppRadius.rowArtwork,
             ),
             title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(songCountText(library.countOf(p.id))),
-            trailing: const Icon(Icons.chevron_right),
+            trailing:
+                const Icon(Icons.chevron_right, color: AppColors.textTertiary),
             onTap: () => PlaylistDetailScreen.open(context, p.id),
           ),
-          const Divider(height: 1),
+          _separator,
         ],
       ],
     );

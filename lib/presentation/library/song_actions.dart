@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/haptics.dart';
 import '../../data/models/song.dart';
 import '../../domain/playback/queue_manager.dart';
 import '../../providers/audio_handler_provider.dart';
@@ -38,6 +39,7 @@ Future<void> playNextWithMessage(
   final handler = ref.read(audioHandlerProvider);
   try {
     final result = await handler.playSongNext(song);
+    Haptics.light();
     _snack(messenger,
         queueAddMessage(result, playNext: true, title: song.title));
   } catch (e) {
@@ -55,6 +57,7 @@ Future<void> addToQueueWithMessage(
   final handler = ref.read(audioHandlerProvider);
   try {
     final result = await handler.addSongToQueue(song);
+    Haptics.light();
     _snack(messenger,
         queueAddMessage(result, playNext: false, title: song.title));
   } catch (e) {
@@ -97,6 +100,7 @@ Future<void> confirmAndRemoveSong(
     ),
   );
   if (confirmed != true) return;
+  Haptics.medium(); // a removal the user just confirmed
 
   try {
     // Stop playing it first: never delete a file that is being played.

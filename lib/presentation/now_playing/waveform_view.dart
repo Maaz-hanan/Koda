@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 
+import '../../core/haptics.dart';
 import '../../core/loop_time.dart';
 import '../../domain/loop/loop_region.dart';
 import '../../domain/waveform/waveform_peaks.dart';
@@ -95,6 +96,7 @@ class _WaveformViewState extends State<WaveformView> {
       _active = null; // finger is not near either handle
       return;
     }
+    Haptics.tick(); // handle grabbed
     setState(() {
       _undecided = (ds - de).abs() < 2;
       _active = (ds <= de) ? _Handle.start : _Handle.end;
