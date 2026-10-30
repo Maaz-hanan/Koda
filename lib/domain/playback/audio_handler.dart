@@ -246,6 +246,29 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     await _loadCurrentAndPlay();
   }
 
+  // ---- Volume (the app's own volume, 0..1, relative to the phone's) ----
+
+  double _volume = 1.0;
+  final StreamController<double> _volumeChanges =
+      StreamController<double>.broadcast();
+
+  double get volume => _volume;
+  Stream<double> get volumeStream => _volumeChanges.stream;
+
+  /// Sets the app volume. While the slider is dragged call with
+  /// `save: false`; on release call with the default so it is remembered.
+  Future<void> setVolume(double v, {bool save = true}) async {
+    final clamped = v.clamp(0.0, 1.0).toDouble();
+    _volume = clamped;
+    _volumeChanges.add(clamped);
+    try {
+      await _player.setVolume(clamped);
+    } catch (_) {
+      // A failed volume change must never break playback.
+    }
+    if (save) await _persistence.saveVolume(clamped);
+  }
+
   // ---- Shuffle [PRD FR-008] ----
 
   final math.Random _random = math.Random();
@@ -426,6 +449,10 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   /// starts with nothing loaded. [PRD FR-011]
   Future<void> restoreLastSession(List<Song> library) async {
     try {
+      // The volume is restored first, so it applies even with no saved song.
+      final savedVolume = await _persistence.loadVolume();
+      if (savedVolume != null) await setVolume(savedVolume, save: false);
+
       final saved = await _persistence.load();
       if (saved == null) return;
 

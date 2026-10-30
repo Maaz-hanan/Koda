@@ -16,6 +16,7 @@ class CircleIconButton extends StatelessWidget {
     this.active = false,
     this.size = AppSpacing.minTouchTarget,
     this.iconSize = 22,
+    this.activeColor = AppColors.accent,
   });
 
   final IconData icon;
@@ -25,12 +26,15 @@ class CircleIconButton extends StatelessWidget {
   final double size;
   final double iconSize;
 
+  /// The icon color while [active] (the heart uses red, the rest accent).
+  final Color activeColor;
+
   @override
   Widget build(BuildContext context) {
     final color = onPressed == null
         ? AppColors.textTertiary
         : active
-            ? AppColors.accent
+            ? activeColor
             : AppColors.textPrimary;
 
     return SizedBox(

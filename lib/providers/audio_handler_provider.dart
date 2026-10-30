@@ -35,6 +35,20 @@ class ShuffleNotifier extends Notifier<bool> {
 final shuffleProvider =
     NotifierProvider<ShuffleNotifier, bool>(ShuffleNotifier.new);
 
+/// The app volume 0..1 (relative to the phone's volume).
+class VolumeNotifier extends Notifier<double> {
+  @override
+  double build() {
+    final handler = ref.watch(audioHandlerProvider);
+    final sub = handler.volumeStream.listen((v) => state = v);
+    ref.onDispose(sub.cancel);
+    return handler.volume;
+  }
+}
+
+final volumeProvider =
+    NotifierProvider<VolumeNotifier, double>(VolumeNotifier.new);
+
 /// Fires with a song's id each time that song's "last played" time was saved.
 final songPlayedProvider = StreamProvider<String>(
   (ref) => ref.watch(audioHandlerProvider).songPlayedStream,

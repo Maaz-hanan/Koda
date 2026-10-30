@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/loop/loop_mode.dart';
+import '../shared/glass_container.dart';
+import '../theme/app_theme.dart';
 
 /// The Loop button on the Now Playing screen. [PRD §3.1, §3.2, FR-042]
 ///
@@ -38,13 +40,8 @@ class LoopButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final active = mode != LoopMode.off;
-    final color = !active
-        ? scheme.onSurfaceVariant
-        : (mode == LoopMode.finiteSection || mode == LoopMode.infiniteSection)
-            ? scheme.tertiary
-            : scheme.primary;
+    final color = active ? AppColors.accent : AppColors.textSecondary;
 
     return Semantics(
       button: true,
@@ -63,7 +60,19 @@ class LoopButton extends StatelessWidget {
           child: SizedBox(
             width: 56, // comfortably above the 48 pt minimum touch target
             height: 56,
-            child: Center(child: _icon(color)),
+            child: Center(
+              child: SizedBox(
+                width: AppSpacing.minTouchTarget,
+                height: AppSpacing.minTouchTarget,
+                child: GlassContainer(
+                  radius: AppSpacing.minTouchTarget / 2,
+                  fill: active
+                      ? AppColors.glassFillStrong
+                      : AppColors.glassFill,
+                  child: Center(child: _icon(color)),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -73,10 +82,10 @@ class LoopButton extends StatelessWidget {
   Widget _icon(Color color) {
     switch (mode) {
       case LoopMode.off:
-        return Icon(Icons.repeat, size: 28, color: color);
+        return Icon(Icons.repeat, size: 24, color: color);
       case LoopMode.repeatOnce:
         // Material's repeat_one icon is the repeat arrows with a "1".
-        return Icon(Icons.repeat_one, size: 28, color: color);
+        return Icon(Icons.repeat_one, size: 24, color: color);
       case LoopMode.repeatInfinite:
         return _badged(color, '∞');
       case LoopMode.finiteSection:
@@ -91,10 +100,10 @@ class LoopButton extends StatelessWidget {
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
-        Icon(Icons.repeat, size: 28, color: color),
+        Icon(Icons.repeat, size: 24, color: color),
         Positioned(
-          right: -6,
-          bottom: -6,
+          right: -5,
+          bottom: -5,
           child: Text(
             badge,
             style: TextStyle(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/format_duration.dart';
 import '../../domain/loop/loop_status.dart';
+import '../shared/glass_container.dart';
+import '../theme/app_theme.dart';
 
 /// The words shown for a section loop, e.g. title "Loop 1:05 – 1:20" and
 /// detail "Running · 3 left". A top-level function so tests can check the
@@ -21,12 +23,15 @@ import '../../domain/loop/loop_status.dart';
   return (title: title, detail: detail);
 }
 
-/// Shown under the Loop button on Now Playing. [PRD FR-025, FR-042, FR-043]
+/// Shown under the transport buttons on Now Playing. [PRD FR-025, FR-042,
+/// FR-043]
 ///
-/// * While a section loop is set it shows the range, whether the loop is
-///   waiting or running, and the plays left (or ∞).
-/// * The "Edit loop" button is ALWAYS visible, for people who do not know the
-///   long press on the Loop button.
+/// * While a section loop is set: a glass capsule with the range, whether the
+///   loop is waiting or running, the plays left (or ∞), and the "Edit loop"
+///   pill on the right.
+/// * Without a loop only the "Edit loop" pill is shown.
+/// The "Edit loop" button is ALWAYS visible, for people who do not know the
+/// long press on the Loop button.
 class LoopStatusPanel extends StatelessWidget {
   const LoopStatusPanel({
     super.key,
@@ -42,71 +47,72 @@ class LoopStatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final s = status;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (s != null) ...[
-          _StatusCard(status: s),
-          const SizedBox(height: 4),
-        ],
-        TextButton.icon(
-          onPressed: onEdit,
-          icon: const Icon(Icons.edit_outlined),
-          label: const Text('Edit loop'),
-          style: TextButton.styleFrom(foregroundColor: scheme.onSurfaceVariant),
-        ),
-      ],
+    final pill = FilledButton.tonal(
+      onPressed: onEdit,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 36),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: const StadiumBorder(),
+        backgroundColor: AppColors.glassFillStrong,
+        foregroundColor: AppColors.textPrimary,
+      ),
+      child: const Text('Edit loop'),
     );
-  }
-}
 
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.status});
+    if (s == null) return pill;
 
-  final SectionLoopStatus status;
+    final text = loopStatusText(s);
+    final running = s.phase == SectionLoopPhase.running;
+    final accent = running ? AppColors.accent : AppColors.textSecondary;
 
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = loopStatusText(status);
-    final running = status.phase == SectionLoopPhase.running;
-    final accent = running ? scheme.tertiary : scheme.onSurfaceVariant;
-
-    return Semantics(
-      container: true,
-      label: '${text.title}. ${text.detail}',
-      excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(running ? Icons.loop : Icons.hourglass_empty,
-                size: 20, color: accent),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+    return GlassContainer(
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+      child: Row(
+        children: [
+          // Semantics only around the text part, not around the button.
+          Expanded(
+            child: Semantics(
+              container: true,
+              label: '${text.title}. ${text.detail}',
+              excludeSemantics: true,
+              child: Row(
                 children: [
-                  Text(text.title,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Text(text.detail,
-                      style: TextStyle(
-                          fontSize: 13, color: scheme.onSurfaceVariant)),
+                  Icon(running ? Icons.loop : Icons.hourglass_empty,
+                      size: 20, color: accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          text.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          text.detail,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 13, color: accent),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          pill,
+        ],
       ),
     );
   }

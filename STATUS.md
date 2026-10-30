@@ -732,12 +732,70 @@ PHASES (one per zip; the owner tests each before the next):
   regression pass (PHASE7_CHECKLIST.md again).
 
 ## Next steps
-1. UI-4 (Now Playing + VOLUME SLIDER) is NEXT. NOTHING of UI-4 is written yet:
-   the full ready-to-implement brief is in HANDOFF.md. Then UI-5 (Queue), UI-6
-   (loop editor + polish), ONE phase per zip, updating STATUS.md AND HANDOFF.md
-   each time.
+1. UI-4 and UI-5 DONE (owner-tested). NEXT: UI-6 (loop editor sheet + final
+   polish), then UI-7 (Edit song: rename + cover from Photos), ONE phase per
+   zip, updating STATUS.md AND HANDOFF.md each time.
 2. Skipped by the owner, do NOT build unless asked: tighter loop-end timing,
    lock-screen loop state, accessibility pass, Auto Loop (Phase 5),
    Albums/Artists tabs, crossfade / continue-playing / lyrics / AirPlay.
    (Volume is NOT skipped: see the UI decisions.)
    Still optional if asked: write a missing song duration back to the database.
+
+## UI-4 (DONE: owner tested on iPhone, "everything works")
+Owner's `flutter test` total before UI-4: 278+ (all passed).
+- New: presentation/now_playing/artwork_tint.dart (16x16 dart:ui average ->
+  dark HSL tint, cached per file path, null on any error),
+  now_playing_background.dart (artworkTintProvider + animated gradient, fallback
+  gradient), volume_slider.dart; presentation/shared/scrub_bar.dart (6 pt bar,
+  10 pt while dragging, no LayoutBuilder so it works inside IntrinsicHeight).
+- Rewritten: now_playing_screen.dart (grabber to close, artwork scales 0.86x
+  when paused, title row + glass heart, ScrubBar seek with the old drag logic,
+  bare rewind/play/forward glyphs, glass loop capsule, volume bar, bottom glass
+  row: Shuffle, Loop, Add to playlist, Queue). Restyled: loop_button.dart (glass
+  circle, accent when active), loop_status_panel.dart (glass capsule + "Edit
+  loop" pill; same texts), circle_icon_button.dart (new activeColor).
+- Volume = the APP volume (just_audio setVolume, 0..1, relative to the phone's
+  volume buttons). audio_handler.dart: volume, volumeStream, setVolume(v,
+  {save}); saved via PlaybackPersistence.saveVolume/loadVolume (key
+  player_volume_v1) and restored first in restoreLastSession. volumeProvider.
+  Changing the SYSTEM volume would need a new package: not done, ask first.
+- Fix after first run: ScrubBar now takes semanticFormat (Flutter needs value,
+  increasedValue, decreasedValue together); scrub test pumps twice for the
+  animation; two unnecessary imports removed. Test total was 288 passed + 3 failed.
+- New tests: artwork_tint_test, scrub_bar_test, volume_slider_test,
+  now_playing_background_test. Existing loop_button / loop_status_panel tests
+  were left unchanged (the same texts and icons are still there).
+- Known risk: IntrinsicHeight + Spacers on Now Playing, the artwork tint
+  quality, and the drag feel of ScrubBar are unverified on a device.
+- Tint cache is per path: UI-7 must save a new cover under a NEW file name.
+
+## UI-7 (planned, requested by the owner): Edit song
+- Edit the song NAME (title) and the COVER (pick from the iPhone Photos app).
+- Needs, and must be ASKED FIRST: the image_picker package (NEW package) and
+  the Info.plist key NSPhotoLibraryUsageDescription.
+- Needs a database change: song title override and artwork path update in
+  SongDao / Song model (check the schema version and migrations first).
+- UI: an "Edit" action in the song's row menu and on Now Playing; a dialog
+  with a text field and a "Change cover" button; copy the picked image into the
+  app's artwork folder under a new file name; update the queue's MediaItem so
+  Now Playing / mini player refresh. Add tests for the title rules.
+
+## UI-5 (DONE: owner tested, "everything works"): Queue screen
+- Rewritten: presentation/queue/queue_screen.dart. Transparent AppBar titled
+  "Queue" over the same artwork-tinted background as Now Playing
+  (NowPlayingBackground). Header: 56 pt artwork, title, artist, glass heart.
+  Pill row (scrolls sideways): Shuffle, Loop (cycles repeat mode), Edit loop
+  (opens the loop editor), Add to playlist. "Up Next" 22 pt title. Rows: 64 pt,
+  48 pt artwork, accent title for the playing song, EqualizerIcon or small
+  tertiary X in the same 48x48 box (alignment kept), tap-to-jump kept.
+- The queue screen now watches songsProvider, shuffleProvider and
+  repeatModeProvider, so test/queue_screen_test.dart overrides them with fakes.
+  Test changes: the playing song and "Unknown Artist" now appear twice (header +
+  row), new checks for "Up Next" and the 4 pills. No other test uses QueueScreen.
+- No database change, no new package. Not changed: audio handler.
+- Fix after the first test run (UI-5b): the queue screen must NOT call
+  ref.read(audioHandlerProvider) inside build(); tests have no real handler and
+  it threw. Read the handler only inside tap callbacks. Same rule for any new
+  screen that tests pump without a handler override.
+- Owner's last `flutter test`: all passing after UI-5b (exact total not
+  reported; was 288 + new queue tests).
