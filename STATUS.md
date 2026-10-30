@@ -1,5 +1,8 @@
 # LoopPlayer — Handoff Status
 
+> **NEW CHAT? Read HANDOFF.md FIRST (short). This file is long (50 KB): do NOT
+> print it whole. Read only the sections HANDOFF.md names (use grep -n "^## ").**
+
 > Lines marked **<CONFIRM>** are things only the owner can confirm. A new AI
 > chat must NOT guess them. Update this file after every tested step.
 
@@ -666,8 +669,7 @@ PHASES (one per zip; the owner tests each before the next):
   work; tapping the artwork/title opens Now Playing; no pill when nothing is
   loaded and the last row then clears the home indicator; same on a playlist
   screen, also in reorder mode; snackbars still show above the pill.
-- UI-3 WRITTEN, NOT YET RUN by the owner (Claude could not run Flutter).
-  <CONFIRM: flutter test count / analyze / iPhone check>. No database change,
+- UI-3 DONE (owner tested: "looks good"). No database change,
   no new packages, no behaviour change (providers, search, import, remove,
   hearts, queue actions, playlist actions all untouched).
   What it does: LIBRARY screen: no AppBar any more; a large "Library" title
@@ -730,11 +732,12 @@ PHASES (one per zip; the owner tests each before the next):
   regression pass (PHASE7_CHECKLIST.md again).
 
 ## Next steps
-1. Owner tests UI-3 (Library). Then Claude does UI-4 (Now Playing, INCLUDING
-   THE VOLUME SLIDER), UI-5 (Queue), UI-6 (loop editor + polish), ONE phase
-   per zip, updating this file each time.
+1. UI-4 (Now Playing + VOLUME SLIDER) is NEXT. NOTHING of UI-4 is written yet:
+   the full ready-to-implement brief is in HANDOFF.md. Then UI-5 (Queue), UI-6
+   (loop editor + polish), ONE phase per zip, updating STATUS.md AND HANDOFF.md
+   each time.
 2. Skipped by the owner, do NOT build unless asked: tighter loop-end timing,
    lock-screen loop state, accessibility pass, Auto Loop (Phase 5),
    Albums/Artists tabs, crossfade / continue-playing / lyrics / AirPlay.
-   (Volume is NOT skipped any more: see the UI decisions.)
+   (Volume is NOT skipped: see the UI decisions.)
    Still optional if asked: write a missing song duration back to the database.

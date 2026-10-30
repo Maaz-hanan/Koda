@@ -1,0 +1,10 @@
+I'm continuing my iOS app (Flutter, LoopPlayer) from earlier chats. You have no memory of them, so everything you need is in the zip I attached (LoopPlayer-handoff.zip).
+
+Do this, in order:
+1. Unzip it and read HANDOFF.md fully. It is short and it is your instruction manual. Follow its rules exactly (one phase per reply, one zip, commands after the zip, no new packages without asking, do not invent APIs, keep token use low: never print whole big files, read only what HANDOFF.md says).
+2. Read ONLY the parts HANDOFF.md tells you to read for UI-4.
+3. Tell me in at most 15 lines what you understand the current state to be. Do not write any code yet. Wait for my "go".
+
+When I say "go", build UI-4 exactly as the UI-4 BRIEF in HANDOFF.md says: the Now Playing redesign plus the volume slider. Give me the changes as one zip (changed files + updated STATUS.md + updated HANDOFF.md), then the unzip / flutter test / flutter analyze / flutter run commands and the iPhone checks. Remember you cannot run Flutter, so say it is not yet tested.
+
+If I ever say "checkpoint", stop and give me only the updated STATUS.md and HANDOFF.md in a zip.
