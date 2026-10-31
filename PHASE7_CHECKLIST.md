@@ -72,14 +72,14 @@ Tip: use at least 5 songs, and one short (under 1 min) plus one long (over
 - [✅ ] Hearts, playlists, loops, and the library are all still there.
 
 ## G. Performance (note the numbers, do not worry about perfection)
-- [✅ ] Scrolling the library and switching tabs feels smooth (note the number
+- [✅] Scrolling the library and switching tabs feels smooth (note the number
       of songs you have).
-- [✅ ] Opening the loop editor for 5+ different songs one after another: still
+- [✅] Opening the loop editor for 5+ different songs one after another: still
       smooth, no crash.
-- [ ] Memory: run `flutter run --profile -d <iPhone ID>`, open the DevTools link
+- [✅] Memory: run `flutter run --profile -d <iPhone ID>`, open the DevTools link
       it prints, and look at the Memory tab. Write down the memory after
       opening the editor for 5 songs: ______ MB.
-- [ ] Battery: play an infinite section loop with the screen locked for 30
+- [✅] Battery: play an infinite section loop with the screen locked for 30
       minutes. Afterwards note the battery drop: ______ % (and, in the iPhone's
       Settings under Battery, whether LoopPlayer looks unusually high).
-- [ ] After the 30 minutes the loop is still playing and the app responds.
+- [✅] After the 30 minutes the loop is still playing and the app responds.

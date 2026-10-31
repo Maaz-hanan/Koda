@@ -13,6 +13,7 @@ import '../../domain/waveform/waveform_peaks.dart';
 import '../../providers/audio_handler_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/waveform_provider.dart';
+import '../theme/app_theme.dart';
 import 'waveform_view.dart';
 
 /// The Custom Loop Editor. [PRD §3.2, FR-014..FR-016, FR-018, FR-024]
@@ -55,6 +56,67 @@ class LoopEditorSheet extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<LoopEditorSheet> createState() => _LoopEditorSheetState();
+}
+
+/// Round glass look for the small + / - buttons.
+final ButtonStyle _glassIconStyle = IconButton.styleFrom(
+  backgroundColor: AppColors.glassFillStrong,
+  foregroundColor: AppColors.textPrimary,
+);
+
+/// Off / Finite / Infinite as three pills (selected = light fill, dark text).
+class _ModePills extends StatelessWidget {
+  const _ModePills({required this.mode, required this.onChanged});
+
+  final LoopMode mode;
+  final ValueChanged<LoopMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const options = [
+      (LoopMode.off, 'Off'),
+      (LoopMode.finiteSection, 'Finite'),
+      (LoopMode.infiniteSection, 'Infinite'),
+    ];
+    return Row(
+      children: [
+        for (var i = 0; i < options.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: Semantics(
+              button: true,
+              selected: mode == options[i].$1,
+              child: Material(
+                color: mode == options[i].$1
+                    ? AppColors.chipSelected
+                    : AppColors.chipUnselected,
+                shape: const StadiumBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => onChanged(options[i].$1),
+                  child: SizedBox(
+                    height: 40,
+                    child: Center(
+                      child: Text(
+                        options[i].$2,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: mode == options[i].$1
+                              ? AppColors.background
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
@@ -340,19 +402,10 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                         style: TextStyle(color: scheme.onSurfaceVariant)),
                   ],
                   const SizedBox(height: 16),
-                  SegmentedButton<LoopMode>(
-                    segments: const [
-                      ButtonSegment(value: LoopMode.off, label: Text('Off')),
-                      ButtonSegment(
-                          value: LoopMode.finiteSection,
-                          label: Text('Finite')),
-                      ButtonSegment(
-                          value: LoopMode.infiniteSection,
-                          label: Text('Infinite')),
-                    ],
-                    selected: {_mode},
-                    onSelectionChanged: (s) => setState(() {
-                      _mode = s.first;
+                  _ModePills(
+                    mode: _mode,
+                    onChanged: (m) => setState(() {
+                      _mode = m;
                       _error = null;
                     }),
                   ),
@@ -368,7 +421,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                                 error: (e, s) => false,
                               );
                       return Align(
-                        child: OutlinedButton.icon(
+                        child: FilledButton.tonalIcon(
                           key: const Key('loop_preview_button'),
                           onPressed: () {
                             Haptics.tick();
@@ -409,15 +462,17 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                   if (_mode == LoopMode.finiteSection) ...[
                     const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Total plays of the section',
-                            style: Theme.of(context).textTheme.bodyLarge),
+                        Expanded(
+                          child: Text('Total plays of the section',
+                              style: Theme.of(context).textTheme.bodyLarge),
+                        ),
                         Row(
                           children: [
                             IconButton(
                               tooltip: 'Fewer plays',
-                              icon: const Icon(Icons.remove_circle_outline),
+                              style: _glassIconStyle,
+                              icon: const Icon(Icons.remove),
                               onPressed: _count > 1
                                   ? () {
                                       Haptics.tick();
@@ -429,7 +484,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                                 style: Theme.of(context).textTheme.titleMedium),
                             IconButton(
                               tooltip: 'More plays',
-                              icon: const Icon(Icons.add_circle_outline),
+                              style: _glassIconStyle,
+                              icon: const Icon(Icons.add),
                               onPressed: _count < 99
                                   ? () {
                                       Haptics.tick();
@@ -450,7 +506,7 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton(
+                        child: FilledButton.tonal(
                           key: const Key('loop_cancel_button'),
                           onPressed:
                               _saving ? null : () => Navigator.of(context).pop(),
@@ -496,8 +552,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
         key: const Key('waveform_error'),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
+          color: AppColors.glassFill,
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
@@ -561,7 +617,6 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
             decoration: InputDecoration(
               labelText: label,
               hintText: 'm:ss  (e.g. 1:05)',
-              border: const OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() => _error = null),
           ),
@@ -574,7 +629,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
             tooltip: '$label 0.1 s earlier',
             constraints: const BoxConstraints.tightFor(width: 44, height: 44),
             padding: EdgeInsets.zero,
-            icon: const Icon(Icons.remove_circle_outline),
+            style: _glassIconStyle,
+            icon: const Icon(Icons.remove),
             onPressed: () => onNudge(-LoopRegion.nudgeMs),
           ),
         ),
@@ -585,7 +641,8 @@ class _LoopEditorSheetState extends ConsumerState<LoopEditorSheet> {
             tooltip: '$label 0.1 s later',
             constraints: const BoxConstraints.tightFor(width: 44, height: 44),
             padding: EdgeInsets.zero,
-            icon: const Icon(Icons.add_circle_outline),
+            style: _glassIconStyle,
+            icon: const Icon(Icons.add),
             onPressed: () => onNudge(LoopRegion.nudgeMs),
           ),
         ),

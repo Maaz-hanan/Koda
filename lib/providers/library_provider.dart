@@ -34,6 +34,25 @@ class LibraryNotifier extends AsyncNotifier<List<Song>> {
     ]);
   }
 
+  /// Edit song (title and/or cover). Reloads the list so the new title is
+  /// sorted into place, and returns the updated song.
+  Future<Song> editSong(
+    Song song, {
+    String? title,
+    String? coverSourcePath,
+  }) async {
+    final updated = await ref.read(libraryRepositoryProvider).editSong(
+          song,
+          title: title,
+          coverSourcePath: coverSourcePath,
+        );
+    await _reload();
+    try {
+      await ref.read(playlistsProvider.notifier).refresh();
+    } catch (_) {}
+    return updated;
+  }
+
   Future<Song> importFile({
     required String sourcePath,
     required String originalName,

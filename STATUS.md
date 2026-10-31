@@ -732,8 +732,10 @@ PHASES (one per zip; the owner tests each before the next):
   regression pass (PHASE7_CHECKLIST.md again).
 
 ## Next steps
-1. UI-4 and UI-5 DONE (owner-tested). NEXT: UI-6 (loop editor sheet + final
-   polish), then UI-7 (Edit song: rename + cover from Photos), ONE phase per
+1. UI-4 and UI-5 DONE (owner-tested). UI-6 DONE (owner-tested). UI-7 (Edit
+   song) DONE (owner-tested). The UI REDESIGN is finished. UI-8 (owner's extra
+   request: Apple-Music bottom tabs + search + no shuffle on Songs) is WRITTEN,
+   NOT YET RUN. Then the owner will list a few more small changes. UI-7 (Edit song: rename + cover from Photos), ONE phase per
    zip, updating STATUS.md AND HANDOFF.md each time.
 2. Skipped by the owner, do NOT build unless asked: tighter loop-end timing,
    lock-screen loop state, accessibility pass, Auto Loop (Phase 5),
@@ -769,17 +771,34 @@ Owner's `flutter test` total before UI-4: 278+ (all passed).
   quality, and the drag feel of ScrubBar are unverified on a device.
 - Tint cache is per path: UI-7 must save a new cover under a NEW file name.
 
-## UI-7 (planned, requested by the owner): Edit song
-- Edit the song NAME (title) and the COVER (pick from the iPhone Photos app).
-- Needs, and must be ASKED FIRST: the image_picker package (NEW package) and
-  the Info.plist key NSPhotoLibraryUsageDescription.
-- Needs a database change: song title override and artwork path update in
-  SongDao / Song model (check the schema version and migrations first).
-- UI: an "Edit" action in the song's row menu and on Now Playing; a dialog
-  with a text field and a "Change cover" button; copy the picked image into the
-  app's artwork folder under a new file name; update the queue's MediaItem so
-  Now Playing / mini player refresh. Add tests for the title rules.
-
+## UI-7 (DONE, owner-tested "everything works"): Edit song
+Owner approved the image_picker package ("yes image_picker").
+- NO database change and NO migration: the songs table already has `title` and
+  `artwork_path`; Edit song just updates them (the original title is not kept).
+- New: core/song_title.dart (cleanSongTitle: trim, collapse spaces, null if
+  empty, max 200), presentation/library/edit_song_sheet.dart (bottom sheet:
+  140 pt cover, "Change cover" opens the Photos picker through pickCoverFromPhotos,
+  Title field, Cancel / Save; Save only when the title is valid AND something
+  changed; keys edit_song_cover_button, edit_song_title_field,
+  edit_song_cancel_button, edit_song_save_button; pickCover is injectable).
+- LibraryRepository.editSong: re-reads the row, applies the title, copies the
+  cover to artwork/<songId>-<millis>.jpg|png (NEW name each time, so the tint
+  cache and image cache never show the old one), updates the DB, THEN deletes the
+  old cover file (and deletes the new copy if the DB write fails).
+  LibraryNotifier.editSong reloads the list and the playlists.
+  QueueManager.replaceSong + AudioHandler.updateSongInfo refresh the queue and
+  the playing song (Now Playing, mini player, lock screen) without interrupting
+  playback.
+- Where: "Edit song..." in each song row's "..." menu (SongTile.onEdit, all song
+  lists) and a pencil glass button in Now Playing's bottom row.
+- New package: image_picker ^1.1.2 (pubspec.yaml). ios/Runner/Info.plist got
+  NSPhotoLibraryUsageDescription. Owner must run `flutter pub get` (and a full
+  `flutter run`, not hot reload, because of the new native plugin).
+- Also in this zip: the volume bar is thicker (ScrubBar.thickness, volume uses
+  10 pt, 14 pt while dragging; the position bar is unchanged at 6 / 10).
+- New tests: song_edit_test (cleanSongTitle, QueueManager.replaceSong),
+  edit_song_sheet_test (Save rules, picker, picker error). The repository copy /
+  DB part and the real Photos picker are NOT unit-tested: iPhone check only.
 ## UI-5 (DONE: owner tested, "everything works"): Queue screen
 - Rewritten: presentation/queue/queue_screen.dart. Transparent AppBar titled
   "Queue" over the same artwork-tinted background as Now Playing
@@ -799,3 +818,54 @@ Owner's `flutter test` total before UI-4: 278+ (all passed).
   screen that tests pump without a handler override.
 - Owner's last `flutter test`: all passing after UI-5b (exact total not
   reported; was 288 + new queue tests).
+
+## UI-6 (DONE, owner-tested): loop editor + waveform
+- loop_editor_sheet.dart: Off/Finite/Infinite is now 3 pills (_ModePills; same
+  texts, so tests that tap 'Infinite' still work), Preview is a tonal pill
+  button, Cancel is tonal, Save stays the filled accent button, the +/- buttons
+  (time nudges and plays count) are glass circles with plain + / - icons, the
+  time fields use the app theme's filled style (the old OutlineInputBorder
+  override was removed). All Keys kept.
+- waveform_view.dart: 12 pt rounded glass container, accent region; green start
+  and red end handles unchanged. The waveform error box uses the same look.
+- Sheet shape, input style, snackbars and dialogs were already themed in UI-1
+  (app_theme.dart), so the dialogs needed no change. No new package, no DB change.
+- Final polish NOT done beyond this: owner should run PHASE7_CHECKLIST.md and
+  report anything that looks off; fix only what is reported.
+- UI-6 fix: on a narrow iPhone the 'Total plays of the section' row overflowed by
+  5.8 px (Finite mode). The label is now Expanded so it wraps instead.
+
+## Ideas NOT built (only if the owner asks; each needs a decision first)
+- Change the SYSTEM volume from the app's slider (needs a new package).
+- "Remove cover" / "Reset title to original" in Edit song.
+- Albums / Artists tabs (removed on purpose), Auto Loop (Phase 5, dropped).
+- Release prep: app icon, app name, launch screen, TestFlight / App Store.
+
+## UI-8 (written, NOT YET RUN by the owner): Apple-Music bottom bar
+Owner request (after seeing Apple Music screenshots): remove the Shuffle button
+from the Songs tab only; tabs Songs / Playlists / Favorites / Recents at the
+bottom with icons, collapsible; the mini player moves with them; search like
+Apple Music, collapsible. Keep the "Library" title and the "+" button as they are.
+- New: presentation/library/library_bottom_bar.dart (LibraryTab list + LibraryBottomBar).
+  * Tabs open: mini player ABOVE, then a glass tab pill (music_note Songs,
+    queue_music Playlists, favorite Favorites, history Recents; selected = accent
+    on a lighter pill) and a round search button.
+  * Collapsed: ONE row = round icon of the selected tab (tap = open tabs again) |
+    mini player (skip button hidden) | round search button.
+  * Search: tap the round search button -> the tab pill becomes a glass search
+    field (autofocus) + round close button, mini player stays on top. Closing
+    clears the search. It filters all four sections as before (searchQueryProvider).
+  * Collapse trigger: scrolling a list DOWN collapses, scrolling UP opens
+    (NotificationListener<UserScrollNotification> in library_screen.dart,
+    vertical scrolls only). Short lists that do not scroll never collapse.
+- library_screen.dart: now a ConsumerStatefulWidget with its own TabController
+  (no DefaultTabController); the top search box, the pill chips and the Songs
+  tab's ShufflePlayButton row were removed; bottomNavigationBar = LibraryBottomBar.
+  Shuffle still exists in the playlist detail screen and in Now Playing / Queue.
+- mini_player.dart: new params embedded (pill only, 56 pt, no outer padding) and
+  showSkip. Default use (playlist detail screen) is unchanged.
+- pill_chip_row.dart and its test are now unused by the app but kept.
+- Tab label is "Recents" (was "Recently Played").
+- Tests: test/library_bottom_bar_test.dart. No new package, no DB change.
+- Unverified on a device: the look of the glass pill, the collapse animation
+  feel, and keyboard behaviour in search (bar should sit above the keyboard).

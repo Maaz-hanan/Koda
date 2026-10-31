@@ -16,10 +16,22 @@ import 'glass_container.dart';
 /// under the glass and automatically keeps its last row clear of the pill.
 /// Nothing is drawn when no song is loaded.
 class MiniPlayer extends ConsumerWidget {
-  const MiniPlayer({super.key});
+  const MiniPlayer({super.key, this.embedded = false, this.showSkip = true});
 
   /// Height of the pill itself.
   static const double height = 60;
+
+  /// Height when [embedded] in the library's bottom bar (same as its buttons).
+  static const double embeddedHeight = 56;
+
+  /// True: only the glass pill, with no outer padding or safe area, so a
+  /// parent (the library bottom bar) can place it. False: the pill hangs at
+  /// the bottom of a screen as `bottomNavigationBar`.
+  final bool embedded;
+
+  /// Show the "next song" button (the collapsed bottom bar hides it to save
+  /// room, like Apple Music).
+  final bool showSkip;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,13 +48,8 @@ class MiniPlayer extends ConsumerWidget {
           error: (e, s) => false,
         );
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        // 12 pt of air above the pill, 12 at the sides, 8 above the bottom.
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-        child: SizedBox(
-          height: height,
+    final pill = SizedBox(
+          height: embedded ? embeddedHeight : height,
           child: GlassContainer(
             radius: AppRadius.glassMiniPlayer,
             shadow: true,
@@ -102,20 +109,29 @@ class MiniPlayer extends ConsumerWidget {
                     playing ? handler.pause() : handler.play();
                   },
                 ),
-                IconButton(
-                  iconSize: 26,
-                  tooltip: 'Next song',
-                  icon: const Icon(Icons.skip_next),
-                  onPressed: () {
-                    Haptics.light();
-                    ref.read(audioHandlerProvider).skipToNext();
-                  },
-                ),
+                if (showSkip)
+                  IconButton(
+                    iconSize: 26,
+                    tooltip: 'Next song',
+                    icon: const Icon(Icons.skip_next),
+                    onPressed: () {
+                      Haptics.light();
+                      ref.read(audioHandlerProvider).skipToNext();
+                    },
+                  ),
                 const SizedBox(width: 4),
               ],
             ),
           ),
-        ),
+    );
+
+    if (embedded) return pill;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        // 12 pt of air above the pill, 12 at the sides, 8 above the bottom.
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: pill,
       ),
     );
   }

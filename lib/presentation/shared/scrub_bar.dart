@@ -16,6 +16,7 @@ class ScrubBar extends StatefulWidget {
     this.onChanged,
     this.onChangeEnd,
     this.enabled = true,
+    this.thickness = 6,
     this.semanticLabel,
     this.semanticFormat,
   });
@@ -25,6 +26,9 @@ class ScrubBar extends StatefulWidget {
   final ValueChanged<double>? onChanged;
   final ValueChanged<double>? onChangeEnd;
   final bool enabled;
+
+  /// Track height in pt; it grows by 4 pt while dragging.
+  final double thickness;
   final String? semanticLabel;
 
   /// Turns a bar value into spoken words (e.g. "1:05" or "50%"). VoiceOver
@@ -76,7 +80,7 @@ class _ScrubBarState extends State<ScrubBar> {
     final fraction = widget.max <= 0
         ? 0.0
         : (widget.value / widget.max).clamp(0.0, 1.0).toDouble();
-    final thickness = _dragging ? 10.0 : 6.0;
+    final thickness = _dragging ? widget.thickness + 4 : widget.thickness;
     final on = widget.enabled;
 
     final format = widget.semanticFormat;
@@ -122,7 +126,7 @@ class _ScrubBarState extends State<ScrubBar> {
                 duration: const Duration(milliseconds: 150),
                 height: thickness,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
+                  borderRadius: BorderRadius.circular(thickness),
                   child: ColoredBox(
                     color: AppColors.progressTrack,
                     child: Align(

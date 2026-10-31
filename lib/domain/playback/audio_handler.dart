@@ -474,6 +474,17 @@ class LoopPlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
+  /// A song was edited (new title or cover): refresh it in the queue and, if
+  /// it is playing now, in Now Playing, the mini player and the lock screen.
+  void updateSongInfo(Song song) {
+    _queueManager.replaceSong(song);
+    queue.add(_queueManager.songs.map(_toMediaItem).toList());
+    final shown = mediaItem.value;
+    if (shown != null && shown.id == song.id) {
+      mediaItem.add(_toMediaItem(song, duration: shown.duration));
+    }
+  }
+
   /// Call BEFORE deleting a song from the library. If it is playing, playback
   /// stops (we must not delete a file that is being played).
   Future<void> removeFromQueue(String songId) async {

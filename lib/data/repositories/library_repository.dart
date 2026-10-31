@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
+import '../../core/song_title.dart';
 import '../../core/storage_paths.dart';
 import '../database/song_dao.dart';
 import '../models/song.dart';
@@ -18,6 +21,49 @@ class LibraryRepository {
   Future<void> addSong(Song song) => _songDao.insert(song);
 
   Future<void> updateSong(Song song) => _songDao.update(song);
+
+  /// Edit song: a new [title] and/or a new cover picture copied from
+  /// [coverSourcePath]. The cover is saved under a NEW file name (so cached
+  /// pictures never show the old one) and the old cover file is deleted only
+  /// after the database row was updated. Returns the updated song.
+  Future<Song> editSong(
+    Song song, {
+    String? title,
+    String? coverSourcePath,
+  }) async {
+    var updated = await _songDao.getById(song.id) ?? song;
+
+    if (title != null) {
+      final clean = cleanSongTitle(title);
+      if (clean == null) throw ArgumentError('The title cannot be empty.');
+      updated = updated.copyWith(title: clean);
+    }
+
+    String? newCoverAbsolute;
+    final oldCoverAbsolute = updated.absoluteArtworkPath;
+    if (coverSourcePath != null) {
+      final ext = p.extension(coverSourcePath).toLowerCase() == '.png'
+          ? 'png'
+          : 'jpg';
+      final relative = p.join(
+          'artwork', '${song.id}-${DateTime.now().millisecondsSinceEpoch}.$ext');
+      await StoragePaths.ensureDir('artwork');
+      newCoverAbsolute = StoragePaths.resolve(relative);
+      await File(coverSourcePath).copy(newCoverAbsolute);
+      updated = updated.copyWith(artworkPath: relative);
+    }
+
+    try {
+      await _songDao.update(updated);
+    } catch (_) {
+      if (newCoverAbsolute != null) await _deleteFileQuietly(newCoverAbsolute);
+      rethrow;
+    }
+    if (newCoverAbsolute != null && oldCoverAbsolute != null) {
+      await _deleteFileQuietly(oldCoverAbsolute);
+    }
+    return updated;
+  }
 
   /// Heart on / off. [PRD FR-005]
   Future<void> setFavorite(String id, bool isFavorite) =>

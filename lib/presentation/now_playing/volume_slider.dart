@@ -27,6 +27,7 @@ class VolumeSlider extends StatelessWidget {
           child: ScrubBar(
             value: value,
             max: 1,
+            thickness: 10,
             onChanged: onChanged,
             onChangeEnd: onChangeEnd,
             semanticLabel: 'Volume',

@@ -1,9 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/haptics.dart';
 import '../../data/models/playlist.dart';
 import '../../data/services/import_service.dart';
 import '../../domain/library/library_views.dart';
@@ -16,17 +16,51 @@ import '../../providers/search_provider.dart';
 import '../playlists/playlist_list_view.dart';
 import '../shared/circle_icon_button.dart';
 import '../shared/empty_state.dart';
-import '../shared/mini_player.dart';
-import '../shared/pill_chip_row.dart';
-import '../shared/shuffle_play_button.dart';
 import '../theme/app_theme.dart';
+import 'library_bottom_bar.dart';
 import 'song_list_view.dart';
 
 /// Library: a large title, import, search, and four views you can swipe
 /// between or pick with the chips: Songs, Playlists, Favorites, Recently
 /// Played. [PRD FR-003]
-class LibraryScreen extends ConsumerWidget {
+class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
+
+  @override
+  ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends ConsumerState<LibraryScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+
+  /// True while the bottom tabs are collapsed (set by scrolling a list down).
+  final ValueNotifier<bool> _collapsed = ValueNotifier<bool>(false);
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: LibraryTab.all.length, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    _collapsed.dispose();
+    super.dispose();
+  }
+
+  /// Scrolling a list down collapses the tabs, scrolling up opens them
+  /// again (like Apple Music). Only vertical scrolling counts.
+  bool _onScroll(UserScrollNotification n) {
+    if (n.metrics.axis != Axis.vertical) return false;
+    if (n.direction == ScrollDirection.reverse) {
+      _collapsed.value = true;
+    } else if (n.direction == ScrollDirection.forward) {
+      _collapsed.value = false;
+    }
+    return false;
+  }
 
   void _snack(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
@@ -69,7 +103,7 @@ class LibraryScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final songs = ref.watch(songsProvider);
     final query = ref.watch(searchQueryProvider);
     final playlistLibrary = ref.watch(playlistsProvider).maybeWhen<PlaylistLibrary>(
@@ -87,16 +121,15 @@ class LibraryScreen extends ConsumerWidget {
       next.whenData((message) => _snack(context, message));
     });
 
-    return DefaultTabController(
-      length: _SectionChips.labels.length,
-      child: AnnotatedRegion<SystemUiOverlayStyle>(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
         // Light status bar icons on the black background.
         value: SystemUiOverlayStyle.light,
         child: Scaffold(
           // Lists scroll under the floating mini player and keep their last
           // row clear of it.
           extendBody: true,
-          bottomNavigationBar: const MiniPlayer(),
+          bottomNavigationBar:
+              LibraryBottomBar(controller: _tabs, collapsed: _collapsed),
           body: SafeArea(
             bottom: false,
             child: Column(
@@ -130,39 +163,16 @@ class LibraryScreen extends ConsumerWidget {
 
                       return Column(
                         children: [
-                          const _SearchField(),
-                          const _SectionChips(),
                           const SizedBox(height: 8),
                           Expanded(
-                            child: TabBarView(
+                            child: NotificationListener<UserScrollNotification>(
+                              onNotification: _onScroll,
+                              child: TabBarView(
+                              controller: _tabs,
                               children: [
-                                Column(
-                                  children: [
-                                    if (shownSongs.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            AppSpacing.pageMargin, 0,
-                                            AppSpacing.pageMargin, 8),
-                                        child: Row(
-                                          children: [
-                                            ShufflePlayButton(
-                                              onPressed: () {
-                                                Haptics.light();
-                                                ref
-                                                    .read(audioHandlerProvider)
-                                                    .playShuffled(shownSongs);
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    Expanded(
-                                      child: SongListView(
-                                        songs: shownSongs,
-                                        emptyMessage: noMatch('songs'),
-                                      ),
-                                    ),
-                                  ],
+                                SongListView(
+                                  songs: shownSongs,
+                                  emptyMessage: noMatch('songs'),
                                 ),
                                 PlaylistListView(
                                   library: playlistLibrary,
@@ -188,6 +198,7 @@ class LibraryScreen extends ConsumerWidget {
                                 ),
                               ],
                             ),
+                            ),
                           ),
                         ],
                       );
@@ -198,7 +209,6 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -224,84 +234,6 @@ class _LibraryHeader extends StatelessWidget {
             onPressed: onImport,
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// The pill chips that pick the section. They follow the swipe between
-/// pages, and a tap on a chip moves the pages.
-class _SectionChips extends StatelessWidget {
-  const _SectionChips();
-
-  static const labels = ['Songs', 'Playlists', 'Favorites', 'Recently Played'];
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = DefaultTabController.of(context);
-    final animation = controller.animation;
-    return ListenableBuilder(
-      listenable: animation ?? controller,
-      builder: (context, _) {
-        final position = animation?.value ?? controller.index.toDouble();
-        final selected = position.round().clamp(0, labels.length - 1);
-        return PillChipRow(
-          labels: labels,
-          selectedIndex: selected,
-          onSelected: (i) {
-            Haptics.tick();
-            controller.animateTo(i);
-          },
-        );
-      },
-    );
-  }
-}
-
-class _SearchField extends ConsumerStatefulWidget {
-  const _SearchField();
-
-  @override
-  ConsumerState<_SearchField> createState() => _SearchFieldState();
-}
-
-class _SearchFieldState extends ConsumerState<_SearchField> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: ref.read(searchQueryProvider));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasText = ref.watch(searchQueryProvider).isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.pageMargin, 4, AppSpacing.pageMargin, 12),
-      child: SearchBar(
-        controller: _controller,
-        hintText: 'Search songs, artists, albums',
-        leading: const Icon(Icons.search, color: AppColors.textSecondary),
-        trailing: [
-          if (hasText)
-            IconButton(
-              icon: const Icon(Icons.clear, color: AppColors.textSecondary),
-              tooltip: 'Clear search',
-              onPressed: () {
-                _controller.clear();
-                ref.read(searchQueryProvider.notifier).set('');
-              },
-            ),
-        ],
-        onChanged: (value) => ref.read(searchQueryProvider.notifier).set(value),
       ),
     );
   }

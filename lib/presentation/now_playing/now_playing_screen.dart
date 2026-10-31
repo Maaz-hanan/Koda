@@ -10,6 +10,7 @@ import '../../core/haptics.dart';
 import '../../data/models/song.dart';
 import '../../providers/audio_handler_provider.dart';
 import '../../providers/library_provider.dart';
+import '../library/edit_song_sheet.dart';
 import '../playlists/playlist_actions.dart';
 import '../queue/queue_screen.dart';
 import '../shared/artwork_widget.dart';
@@ -308,6 +309,14 @@ class NowPlayingScreen extends ConsumerWidget {
                                       ? null
                                       : () => showAddToPlaylistSheet(
                                           context, ref, librarySong),
+                                ),
+                                CircleIconButton(
+                                  icon: Icons.edit_outlined,
+                                  tooltip: 'Edit song',
+                                  onPressed: librarySong == null
+                                      ? null
+                                      : () => EditSongSheet.show(
+                                          context, librarySong),
                                 ),
                                 CircleIconButton(
                                   icon: Icons.queue_music,

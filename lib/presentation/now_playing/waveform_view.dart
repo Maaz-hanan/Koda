@@ -5,6 +5,7 @@ import '../../core/haptics.dart';
 import '../../core/loop_time.dart';
 import '../../domain/loop/loop_region.dart';
 import '../../domain/waveform/waveform_peaks.dart';
+import '../theme/app_theme.dart';
 
 enum _Handle { start, end }
 
@@ -148,9 +149,9 @@ class _WaveformViewState extends State<WaveformView> {
             height: widget.height,
             width: double.infinity,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               child: ColoredBox(
-                color: scheme.surfaceContainerHighest,
+                color: AppColors.glassFill,
                 child: CustomPaint(
                   size: Size(width, widget.height),
                   painter: _WaveformPainter(
@@ -163,7 +164,7 @@ class _WaveformViewState extends State<WaveformView> {
                     startActive: _active == _Handle.start,
                     endActive: _active == _Handle.end,
                     barColor: scheme.onSurfaceVariant.withValues(alpha: 0.45),
-                    regionColor: scheme.primary,
+                    regionColor: AppColors.accent,
                     playheadColor: scheme.onSurface,
                     startHandleColor: _startColor,
                     endHandleColor: _endColor,

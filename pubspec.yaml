@@ -33,6 +33,9 @@ dependencies:
   # iOS Files picker for importing local audio files
   file_picker: ^13.0.0
 
+  # Pick a cover photo from the iPhone Photos app (Edit song)
+  image_picker: ^1.1.2
+
   # Local SQLite database for songs and loop profiles
   sqflite: ^2.4.5
 

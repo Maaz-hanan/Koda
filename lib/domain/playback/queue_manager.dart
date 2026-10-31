@@ -173,6 +173,17 @@ class QueueManager {
   /// Nothing is current any more (e.g. playback stopped).
   void clearCurrent() => _index = -1;
 
+  /// Swaps in the edited copy of a song (new title or cover) everywhere it
+  /// is queued. The order and the current position do not change.
+  void replaceSong(Song updated) {
+    List<Song> swap(List<Song> list) => List.unmodifiable([
+          for (final s in list) s.id == updated.id ? updated : s,
+        ]);
+    _songs = swap(_songs);
+    final original = _unshuffled;
+    if (original != null) _unshuffled = swap(original);
+  }
+
   /// Removes a song from the queue. Returns true if it was the CURRENT song
   /// (in which case nothing is current afterwards).
   bool remove(String songId) {

@@ -1,10 +1,17 @@
-I'm continuing my iOS app (Flutter, LoopPlayer) from earlier chats. You have no memory of them, so everything you need is in the zip I attached (LoopPlayer-handoff.zip).
+I am continuing my iOS app LoopPlayer (Flutter). You are a NEW assistant with NO memory of earlier chats and no earlier context. The only truth is the files in the zip I attached (LoopPlayer-handoff.zip).
+
+Rules so you do not make things up:
+- Do not assume any file, function, class, widget name or package exists. Check first with `ls`, `grep -n`, `sed -n 'a,bp'`. If you cannot find something, say "I could not find it", never guess.
+- Do not invent Flutter / package APIs. If unsure, web-search once, or tell me.
+- You cannot run Flutter or Dart. Never say tests pass. Say "not yet tested"; I run the tests.
+- Never print whole big files (my usage limit is small). Read only what you need.
+- If STATUS.md and the code disagree, trust the code and tell me.
 
 Do this, in order:
-1. Unzip it and read HANDOFF.md fully. It is short and it is your instruction manual. Follow its rules exactly (one phase per reply, one zip, commands after the zip, no new packages without asking, do not invent APIs, keep token use low: never print whole big files, read only what HANDOFF.md says).
-2. Read ONLY the parts HANDOFF.md tells you to read for UI-4.
-3. Tell me in at most 15 lines what you understand the current state to be. Do not write any code yet. Wait for my "go".
+1. Unzip the attachment and read HANDOFF.md fully (it is short and is your instruction manual). Follow its rules exactly.
+2. Read from STATUS.md ONLY the "UI-8" section (grep -n "^## " STATUS.md first to find it). Do not read anything else yet.
+3. Tell me in at most 15 lines what you understand the current state to be, and list which files UI-8 touched. Do NOT write code. Wait for my message.
 
-When I say "go", build UI-4 exactly as the UI-4 BRIEF in HANDOFF.md says: the Now Playing redesign plus the volume slider. Give me the changes as one zip (changed files + updated STATUS.md + updated HANDOFF.md), then the unzip / flutter test / flutter analyze / flutter run commands and the iPhone checks. Remember you cannot run Flutter, so say it is not yet tested.
+After that I will paste my UI-8 test / analyze results or my next small changes. Work one phase per reply: one zip with only the changed files plus the updated STATUS.md and HANDOFF.md, then the commands, then the iPhone checks. Ask me before adding any package or changing the database.
 
-If I ever say "checkpoint", stop and give me only the updated STATUS.md and HANDOFF.md in a zip.
+If I say "checkpoint", stop and give me only the updated STATUS.md and HANDOFF.md in a zip.

@@ -5,17 +5,37 @@ Flutter by a COMPLETE BEGINNER. Folder: ~/Developer/LoopPlayer. The owner tests
 on a real iPhone. Claude's sandbox CANNOT run Flutter: never claim tests pass;
 the owner runs `flutter test` / `flutter analyze` and reports.
 
-## State right now
-- Phases 1-7 and Phase 6 extras (6-1..6-7) are DONE and tested by the owner.
-  Auto Loop (Phase 5) was dropped. Albums/Artists tabs were removed on purpose.
-- Done since: Polish 1 (queue alignment, live equalizer bars, haptics),
-  Shuffle, UI-1 (theme/glass), UI-2 (floating glass mini player),
-  UI-3 (Library redesign), UI-4 (Now Playing + volume), UI-5 (Queue). All owner-tested ("looks good").
-- UI-4 and UI-5 DONE and owner-tested ("everything works"). Nothing pending.
-- NEXT: UI-6 (loop editor sheet + final polish),
-  then UI-7 (Edit song: rename + change cover from Photos, see STATUS.md;
-  needs the image_picker package: ASK FIRST). Do not forget UI-7.
-- Owner's last reported `flutter test` total before UI-4: 278+, all passed.
+## State right now (updated at checkpoint after UI-8)
+- DONE and tested by the owner on a real iPhone: Phases 1-7 + Phase 6 extras,
+  Polish 1, Shuffle, UI-1 (theme/glass), UI-2 (floating mini player), UI-3
+  (Library redesign), UI-4 (Now Playing + volume slider), UI-5 (Queue),
+  UI-6 (loop editor + waveform restyle), UI-7 (Edit song: rename + cover from
+  Photos, image_picker approved). Auto Loop (Phase 5) was dropped; Albums /
+  Artists tabs were removed on purpose.
+- UI-8 is WRITTEN, NOT YET RUN by the owner: Apple-Music-style bottom bar in the
+  Library (tabs Songs / Playlists / Favorites / Recents with icons, collapsible
+  on scroll, mini player above or between, search button that opens a bottom
+  search field), and the Shuffle button removed from the Songs tab only. Files:
+  lib/presentation/library/library_bottom_bar.dart (new), library_screen.dart,
+  lib/presentation/shared/mini_player.dart, test/library_bottom_bar_test.dart.
+  Details: STATUS.md "UI-8".
+- NEXT: wait for the owner's UI-8 report (test / analyze / iPhone), fix ONLY what
+  is reported. The owner will then list "a few small changes": do them one
+  phase per zip. Then the owner reruns PHASE7_CHECKLIST.md.
+- Last reported `flutter test`: all passing after UI-7 (before UI-8). The total
+  was never reported exactly (288+ at UI-4, more since).
+- Optional ideas not built are at the end of STATUS.md.
+
+## Lessons from this project (read once)
+- The sandbox has NO `dart` / `flutter`: nothing can be compiled or formatted.
+  After writing Dart, at least check bracket balance and re-read your own edit.
+  Typical bugs so far were found only by the owner's `flutter test`: reading a
+  provider that needs the audio handler inside build(); Semantics value without
+  increasedValue / decreasedValue; animations needing two pump() calls in tests.
+- Before changing any widget run `grep -rn "<Widget>" test` and keep what tests
+  use (Keys, texts, tooltips).
+- When the owner pastes a failing test, fix the real cause; if the pasted
+  output is cut off, say so and ask for the first "EXCEPTION CAUGHT" block.
 
 ## How to work (the owner's rules)
 1. First message: read this file, then ONLY what the phase needs (below), then
@@ -50,15 +70,12 @@ the owner runs `flutter test` / `flutter analyze` and reports.
    "State right now / NEXT" part of this file in the same zip. If the owner says
    "checkpoint", stop and deliver only the updated STATUS.md + HANDOFF.md zip.
 
-## UI-4 (done and owner-tested)
-The old UI-4 brief was removed after it was built; STATUS.md "UI-4 (written)"
-lists what was made. If the owner reports a bug, fix only that.
-
-## UI-5, UI-6, UI-7 (later; see STATUS.md "UI REDESIGN" section for the plan)
-- (UI-5 DONE) Queue screen restyle (tinted background, header, pill row: Shuffle, Loop,
-  Edit loop, Add to playlist, "Up Next", SongTile-like rows; keep tap-to-jump,
-  remove X, EqualizerIcon alignment tests in test/queue_screen_test.dart).
-- UI-6 Loop editor sheet + waveform container restyle (keep every Key), dialogs,
-  final polish, then rerun PHASE7_CHECKLIST.md.
-- UI-7 Edit song (rename + cover from Photos): see STATUS.md "UI-7 (planned)".
-  Ask before adding image_picker. Needs a DB change and an Info.plist key.
+## Where things are (do not re-read everything; grep for what you need)
+- Library: lib/presentation/library/ (library_screen, library_bottom_bar,
+  song_list_view, edit_song_sheet, song_actions). Now Playing:
+  lib/presentation/now_playing/. Queue: lib/presentation/queue/. Shared widgets
+  (glass_container, mini_player, scrub_bar, circle_icon_button, artwork_widget):
+  lib/presentation/shared/. Theme tokens: lib/presentation/theme/app_theme.dart.
+- Audio: lib/domain/playback/audio_handler.dart (+ queue_manager.dart).
+  Providers: lib/providers/. Database + repositories: lib/data/.
+- Design reference: apple_music_design_profile.json (never print it whole).

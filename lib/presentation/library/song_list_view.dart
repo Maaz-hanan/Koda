@@ -9,6 +9,7 @@ import '../shared/artwork_widget.dart';
 import '../shared/equalizer_icon.dart';
 import '../shared/favorite_button.dart';
 import '../theme/app_theme.dart';
+import 'edit_song_sheet.dart';
 import 'list_message.dart';
 import 'song_actions.dart';
 
@@ -95,6 +96,7 @@ class SongListView extends ConsumerWidget {
                   showAddToPlaylistSheet(context, ref, song),
               onPlayNext: () => playNextWithMessage(context, ref, song),
               onAddToQueue: () => addToQueueWithMessage(context, ref, song),
+              onEdit: () => EditSongSheet.show(context, song),
             ),
             const Divider(
               height: 0.5,
@@ -123,6 +125,7 @@ class SongTile extends StatelessWidget {
     this.onAddToPlaylist,
     this.onPlayNext,
     this.onAddToQueue,
+    this.onEdit,
     this.removeLabel = 'Remove from library',
     this.longPressRemoves = true,
   });
@@ -143,6 +146,9 @@ class SongTile extends StatelessWidget {
   /// "Play next" / "Add to queue" items in the "..." menu when set.
   final VoidCallback? onPlayNext;
   final VoidCallback? onAddToQueue;
+
+  /// "Edit song..." (rename, change cover) in the "..." menu when set.
+  final VoidCallback? onEdit;
 
   /// Text of the remove item (library vs. playlist).
   final String removeLabel;
@@ -192,6 +198,8 @@ class SongTile extends StatelessWidget {
                   onAddToQueue?.call();
                 case 'playlist':
                   onAddToPlaylist?.call();
+                case 'edit':
+                  onEdit?.call();
                 default:
                   onRemove();
               }
@@ -205,6 +213,8 @@ class SongTile extends StatelessWidget {
               if (onAddToPlaylist != null)
                 const PopupMenuItem(
                     value: 'playlist', child: Text('Add to playlist...')),
+              if (onEdit != null)
+                const PopupMenuItem(value: 'edit', child: Text('Edit song...')),
               PopupMenuItem(value: 'remove', child: Text(removeLabel)),
             ],
           ),
