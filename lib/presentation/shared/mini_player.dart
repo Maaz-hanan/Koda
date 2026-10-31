@@ -58,7 +58,10 @@ class MiniPlayer extends ConsumerWidget {
                 Expanded(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => NowPlayingScreen.open(context),
+                    onTap: () {
+                      Haptics.tick();
+                      NowPlayingScreen.open(context);
+                    },
                     child: Row(
                       children: [
                         const SizedBox(width: 10),

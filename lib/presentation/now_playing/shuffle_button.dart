@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../shared/circle_icon_button.dart';
@@ -13,7 +14,7 @@ class ShuffleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CircleIconButton(
-      icon: Icons.shuffle,
+      icon: CupertinoIcons.shuffle,
       active: isOn,
       tooltip: isOn ? 'Shuffle: on' : 'Shuffle: off',
       onPressed: onPressed,

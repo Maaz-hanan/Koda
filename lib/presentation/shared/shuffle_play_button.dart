@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 /// The "Shuffle" pill: plays a list in random order. Used above the Songs
@@ -12,7 +13,7 @@ class ShufflePlayButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return FilledButton.tonalIcon(
       onPressed: onPressed,
-      icon: const Icon(Icons.shuffle),
+      icon: const Icon(CupertinoIcons.shuffle),
       label: const Text('Shuffle'),
     );
   }

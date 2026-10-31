@@ -29,6 +29,7 @@ class LibraryRepository {
   Future<Song> editSong(
     Song song, {
     String? title,
+    String? artist,
     String? coverSourcePath,
   }) async {
     var updated = await _songDao.getById(song.id) ?? song;
@@ -37,6 +38,11 @@ class LibraryRepository {
       final clean = cleanSongTitle(title);
       if (clean == null) throw ArgumentError('The title cannot be empty.');
       updated = updated.copyWith(title: clean);
+    }
+
+    if (artist != null) {
+      final cleanArtist = cleanSongTitle(artist);
+      if (cleanArtist != null) updated = updated.copyWith(artist: cleanArtist);
     }
 
     String? newCoverAbsolute;

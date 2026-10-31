@@ -39,11 +39,13 @@ class LibraryNotifier extends AsyncNotifier<List<Song>> {
   Future<Song> editSong(
     Song song, {
     String? title,
+    String? artist,
     String? coverSourcePath,
   }) async {
     final updated = await ref.read(libraryRepositoryProvider).editSong(
           song,
           title: title,
+          artist: artist,
           coverSourcePath: coverSourcePath,
         );
     await _reload();

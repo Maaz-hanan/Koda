@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/haptics.dart';
 import '../../data/models/playlist.dart';
 import '../../data/services/import_service.dart';
 import '../../domain/library/library_views.dart';
@@ -231,7 +232,10 @@ class _LibraryHeader extends StatelessWidget {
             icon: Icons.add,
             active: true,
             tooltip: 'Import music',
-            onPressed: onImport,
+            onPressed: () {
+              Haptics.tick();
+              onImport();
+            },
           ),
         ],
       ),

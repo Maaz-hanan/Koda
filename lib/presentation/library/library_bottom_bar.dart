@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,7 +54,8 @@ class LibraryBottomBar extends ConsumerStatefulWidget {
   ConsumerState<LibraryBottomBar> createState() => _LibraryBottomBarState();
 }
 
-class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar> {
+class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar>
+    with TickerProviderStateMixin {
   static const double _button = 56;
   static const double _gap = 8;
 
@@ -64,10 +67,111 @@ class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar> {
   void initState() {
     super.initState();
     _text = TextEditingController(text: ref.read(searchQueryProvider));
+    _lastTab = widget.controller.index;
+    widget.controller.animation?.addListener(_onTabMove);
+    _lift = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 160))
+      ..addListener(() => setState(() {}));
+    _settle = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 320))
+      ..addListener(_onSettleTick)
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          // Hand the droplet back to the pages (they have arrived too).
+          setState(() => _dragPos = null);
+        }
+      });
+  }
+
+  int _lastTab = 0;
+
+  // ---- holding and dragging the droplet (like Apple's tab bar) ----
+  // Press the droplet: it lifts (gets bigger). Drag: it follows the finger and
+  // NOTHING switches. Lift the finger: it settles on the nearest tab, lowers,
+  // and only then, if that tab is a different one, the page changes.
+  late final AnimationController _lift; // 0 = flat, 1 = lifted
+  late final AnimationController _settle; // droplet gliding to its tab
+  double _slotWidth = 0;
+  double? _dragPos; // droplet position while held / settling, else null
+  int? _pointer; // the finger that holds the droplet
+  double _grabOffset = 0; // finger x minus droplet centre at the grab
+  int _hoverTab = 0;
+  double _settleFrom = 0;
+  int _settleTo = 0;
+
+  void _onSettleTick() {
+    final t = Curves.easeOutCubic.transform(_settle.value);
+    setState(() => _dragPos = _settleFrom + (_settleTo - _settleFrom) * t);
+  }
+
+  void _pointerDown(PointerDownEvent e) {
+    final c = widget.controller;
+    if (_pointer != null || _slotWidth <= 0) return;
+    // A page animation or a settle is still running: ignore this touch.
+    if (c.indexIsChanging || _settle.isAnimating) return;
+    final pos = c.animation?.value ?? c.index.toDouble();
+    final centre = _slotWidth * (pos + 0.5);
+    // Only a press ON the droplet picks it up.
+    if ((e.localPosition.dx - centre).abs() > _slotWidth / 2) return;
+    _pointer = e.pointer;
+    _grabOffset = e.localPosition.dx - centre;
+    _dragPos = pos;
+    _hoverTab = pos.round();
+    _lift.forward();
+    Haptics.tick(); // picked up
+  }
+
+  void _pointerMove(PointerMoveEvent e) {
+    if (e.pointer != _pointer) return;
+    final last = (LibraryTab.all.length - 1).toDouble();
+    final pos = ((e.localPosition.dx - _grabOffset) / _slotWidth - 0.5)
+        .clamp(0.0, last)
+        .toDouble();
+    if (pos.round() != _hoverTab) {
+      _hoverTab = pos.round();
+      Haptics.tick(); // passing over another tab
+    }
+    setState(() => _dragPos = pos);
+  }
+
+  void _pointerEnd(PointerEvent e) {
+    if (e.pointer != _pointer) return;
+    _pointer = null;
+    final from = _dragPos ?? widget.controller.index.toDouble();
+    final target =
+        from.round().clamp(0, LibraryTab.all.length - 1);
+    _lift.reverse();
+    _settleFrom = from;
+    _settleTo = target;
+    _settle.forward(from: 0);
+    // Now (and only now) the page switches.
+    if (target != widget.controller.index) {
+      widget.controller.animateTo(
+        target,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  /// One tick each time the droplet passes the middle between two tabs
+  /// (taps and swipes alike).
+  void _onTabMove() {
+    final v = widget.controller.animation?.value;
+    if (v == null) return;
+    final r = v.round();
+    if (r != _lastTab) {
+      _lastTab = r;
+      // While the droplet is held or settling, _pointerMove already ticked.
+      if (_dragPos == null) Haptics.tick();
+    }
   }
 
   @override
   void dispose() {
+    widget.controller.animation?.removeListener(_onTabMove);
+    _lift.dispose();
+    _settle.dispose();
     _text.dispose();
     _focus.dispose();
     super.dispose();
@@ -110,68 +214,127 @@ class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar> {
     );
   }
 
-  Widget _tabsPill(int selected) {
+  /// The tab pill. One glass "droplet" slides behind the icons. While it
+  /// travels it stretches (like a water drop) and gets a little thinner, then
+  /// settles. It follows the page position, so it works for taps and swipes.
+  Widget _tabsPill() {
+    final c = widget.controller;
+    final count = LibraryTab.all.length;
+    final held = _dragPos != null;
+    final lift = _lift.value;
+    final pos = (_dragPos ?? c.animation?.value ?? c.index.toDouble())
+        .clamp(0.0, (count - 1).toDouble())
+        .toDouble();
+    final selected = pos.round().clamp(0, count - 1);
+
+    // bump: 0 at rest, 1 half way between two tabs. For a tap that jumps
+    // several tabs it is measured over the whole trip, so it stretches once.
+    var bump = 0.0;
+    var span = 1.0;
+    if (!held && c.indexIsChanging && c.index != c.previousIndex) {
+      final from = c.previousIndex;
+      final to = c.index;
+      final p = ((pos - from) / (to - from)).clamp(0.0, 1.0).toDouble();
+      bump = math.sin(math.pi * p);
+      span = (to - from).abs().toDouble();
+    } else {
+      bump = math.sin(math.pi * (pos - pos.floorToDouble()));
+    }
+
     return GlassContainer(
       radius: 32,
       padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          for (var i = 0; i < LibraryTab.all.length; i++)
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: i == selected,
-                label: LibraryTab.all[i].label,
-                excludeSemantics: true,
-                onTap: () => _selectTab(i),
-                child: GestureDetector(
-                  key: Key('library_tab_$i'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _selectTab(i),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: 56,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _pointerDown,
+        onPointerMove: _pointerMove,
+        onPointerUp: _pointerEnd,
+        onPointerCancel: _pointerEnd,
+        child: SizedBox(
+        height: 56,
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final slot = box.maxWidth / count;
+            _slotWidth = slot;
+            // Held: bigger (lift) and only a little stretch while moving.
+            final k = held ? 0.4 : 1.0;
+            final w = slot * (1 + 0.35 * bump * span * k) + 14 * lift;
+            final h = 56 + 8 * lift - 8 * bump * k;
+            final left = (slot * (pos + 0.5) - w / 2)
+                .clamp(-4.0, math.max(-4.0, box.maxWidth - w + 4))
+                .toDouble();
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  key: const Key('library_tab_droplet'),
+                  left: left,
+                  top: (56 - h) / 2,
+                  width: w,
+                  height: h,
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: i == selected
-                          ? AppColors.glassFillStrong
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          LibraryTab.all[i].icon,
-                          size: 24,
-                          color: i == selected
-                              ? AppColors.accent
-                              : AppColors.textPrimary,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          LibraryTab.all[i].label,
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: i == selected
-                                ? AppColors.accent
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
+                      color: Color.alphaBlend(
+                          Colors.white.withValues(alpha: 0.10 * lift),
+                          AppColors.glassFillStrong),
+                      borderRadius: BorderRadius.circular(32),
                     ),
                   ),
                 ),
+                Row(
+                  children: [
+                    for (var i = 0; i < count; i++)
+                      Expanded(child: _tabItem(i, selected, pos)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tabItem(int i, int selected, double pos) {
+    // 1 when the droplet is exactly on this tab, 0 when it is a tab away.
+    final near = (1 - (pos - i).abs()).clamp(0.0, 1.0).toDouble();
+    final color = Color.lerp(AppColors.textPrimary, AppColors.accent, near)!;
+    return Semantics(
+      button: true,
+      selected: i == selected,
+      label: LibraryTab.all[i].label,
+      excludeSemantics: true,
+      onTap: () => _selectTab(i),
+      child: GestureDetector(
+        key: Key('library_tab_$i'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _selectTab(i),
+        child: SizedBox(
+          height: 56,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(LibraryTab.all[i].icon, size: 24, color: color),
+              const SizedBox(height: 2),
+              Text(
+                LibraryTab.all[i].label,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
               ),
-            ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
 
   void _selectTab(int i) {
-    Haptics.tick();
+    // The tick is fired by _onTabMove, so taps and swipes feel the same.
     widget.controller.animateTo(i);
   }
 
@@ -196,7 +359,19 @@ class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar> {
                 cursorColor: AppColors.accent,
                 style: const TextStyle(
                     fontSize: 17, color: AppColors.textPrimary),
-                decoration: const InputDecoration.collapsed(
+                // The app theme gives every text field a filled box and a red
+                // focus border. Switch all of that off: the glass pill is
+                // the field.
+                decoration: const InputDecoration(
+                  isCollapsed: true,
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
                   hintText: 'Search songs, artists, albums',
                   hintStyle: TextStyle(color: AppColors.textSecondary),
                 ),
@@ -210,6 +385,7 @@ class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar> {
                 icon: const Icon(Icons.clear, color: AppColors.textSecondary),
                 tooltip: 'Clear search',
                 onPressed: () {
+                  Haptics.tick();
                   _text.clear();
                   ref.read(searchQueryProvider.notifier).set('');
                 },
@@ -264,7 +440,7 @@ class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar> {
                     ],
                     Row(
                       children: [
-                        Expanded(child: _tabsPill(selected)),
+                        Expanded(child: _tabsPill()),
                         const SizedBox(width: _gap),
                         searchButton,
                       ],
@@ -316,10 +492,16 @@ class _LibraryBottomBarState extends ConsumerState<LibraryBottomBar> {
                 );
             }
 
-            return SafeArea(
-              top: false,
+            // Sits on the home-indicator area, or ON TOP OF the keyboard while
+            // it is open. The keyboard height is animated by the phone, so the
+            // whole bar glides up and down with it.
+            final media = MediaQuery.of(context);
+            final bottomInset =
+                math.max(media.padding.bottom, media.viewInsets.bottom);
+            return Padding(
+              padding: EdgeInsets.fromLTRB(12, 8, 12, 8 + bottomInset),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                padding: EdgeInsets.zero,
                 child: AnimatedSize(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOutCubic,

@@ -57,6 +57,7 @@ class EditSongSheet extends ConsumerStatefulWidget {
 
 class _EditSongSheetState extends ConsumerState<EditSongSheet> {
   late final TextEditingController _title;
+  late final TextEditingController _artist;
   String? _pickedPath;
   bool _saving = false;
   String? _error;
@@ -65,11 +66,13 @@ class _EditSongSheetState extends ConsumerState<EditSongSheet> {
   void initState() {
     super.initState();
     _title = TextEditingController(text: widget.song.title);
+    _artist = TextEditingController(text: widget.song.artist ?? '');
   }
 
   @override
   void dispose() {
     _title.dispose();
+    _artist.dispose();
     super.dispose();
   }
 
@@ -78,7 +81,14 @@ class _EditSongSheetState extends ConsumerState<EditSongSheet> {
     if (_saving) return false;
     final clean = cleanSongTitle(_title.text);
     if (clean == null) return false;
-    return clean != widget.song.title || _pickedPath != null;
+    return clean != widget.song.title || _artistChanged || _pickedPath != null;
+  }
+
+  /// The artist counts as changed only when something is typed and it differs
+  /// from the saved one (an empty box leaves the artist as it is).
+  bool get _artistChanged {
+    final clean = cleanSongTitle(_artist.text);
+    return clean != null && clean != (widget.song.artist ?? '');
   }
 
   Future<void> _chooseCover() async {
@@ -113,6 +123,7 @@ class _EditSongSheetState extends ConsumerState<EditSongSheet> {
       final updated = await library.editSong(
         widget.song,
         title: clean != widget.song.title ? clean : null,
+        artist: _artistChanged ? cleanSongTitle(_artist.text) : null,
         coverSourcePath: _pickedPath,
       );
       handler.updateSongInfo(updated);
@@ -195,11 +206,26 @@ class _EditSongSheetState extends ConsumerState<EditSongSheet> {
               key: const Key('edit_song_title_field'),
               controller: _title,
               enabled: !_saving,
-              textInputAction: TextInputAction.done,
+              textInputAction: TextInputAction.next,
               inputFormatters: [
                 LengthLimitingTextInputFormatter(kMaxSongTitleLength),
               ],
               decoration: const InputDecoration(labelText: 'Title'),
+              onChanged: (_) => setState(() => _error = null),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('edit_song_artist_field'),
+              controller: _artist,
+              enabled: !_saving,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(kMaxSongTitleLength),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Artist',
+                hintText: 'Unknown Artist',
+              ),
               onChanged: (_) => setState(() => _error = null),
               onSubmitted: (_) {
                 if (_canSave) _save();

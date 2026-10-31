@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/haptics.dart';
 import '../../core/storage_paths.dart';
 import '../../data/models/song.dart';
 import '../../providers/audio_handler_provider.dart';
@@ -81,7 +82,10 @@ class SongListView extends ConsumerWidget {
               song: song,
               isCurrent: song.id == currentId,
               isPlaying: playing,
-              onTap: () => ref.read(audioHandlerProvider).playQueue(songs, i),
+              onTap: () {
+                Haptics.tick();
+                ref.read(audioHandlerProvider).playQueue(songs, i);
+              },
               onRemove: playlistId == null
                   ? () => confirmAndRemoveSong(context, ref, song)
                   : () =>
@@ -176,7 +180,12 @@ class SongTile extends StatelessWidget {
       subtitle: Text(song.displayArtist,
           maxLines: 1, overflow: TextOverflow.ellipsis),
       onTap: onTap,
-      onLongPress: longPressRemoves ? onRemove : null,
+      onLongPress: longPressRemoves
+          ? () {
+              Haptics.medium();
+              onRemove();
+            }
+          : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -188,6 +197,7 @@ class SongTile extends StatelessWidget {
           ),
           PopupMenuButton<String>(
             tooltip: 'More options',
+            onOpened: Haptics.tick,
             icon: const Icon(Icons.more_horiz),
             iconColor: AppColors.textSecondary,
             onSelected: (value) {

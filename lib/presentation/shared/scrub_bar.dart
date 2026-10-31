@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/haptics.dart';
 import '../theme/app_theme.dart';
 
 /// A thin Apple-style bar you can tap or drag: used for the song position
@@ -102,6 +103,7 @@ class _ScrubBarState extends State<ScrubBar> {
         behavior: HitTestBehavior.opaque,
         onTapUp: on
             ? (d) {
+                Haptics.tick();
                 final v = _valueAt(d.localPosition.dx);
                 widget.onChanged?.call(v);
                 widget.onChangeEnd?.call(v);
@@ -109,6 +111,7 @@ class _ScrubBarState extends State<ScrubBar> {
             : null,
         onHorizontalDragStart: on
             ? (d) {
+                Haptics.tick();
                 setState(() => _dragging = true);
                 _moveTo(d.localPosition.dx);
               }

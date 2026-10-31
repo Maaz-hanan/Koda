@@ -5,25 +5,23 @@ Flutter by a COMPLETE BEGINNER. Folder: ~/Developer/LoopPlayer. The owner tests
 on a real iPhone. Claude's sandbox CANNOT run Flutter: never claim tests pass;
 the owner runs `flutter test` / `flutter analyze` and reports.
 
-## State right now (updated at checkpoint after UI-8)
+## State right now (updated at checkpoint after UI-11 fix)
 - DONE and tested by the owner on a real iPhone: Phases 1-7 + Phase 6 extras,
-  Polish 1, Shuffle, UI-1 (theme/glass), UI-2 (floating mini player), UI-3
-  (Library redesign), UI-4 (Now Playing + volume slider), UI-5 (Queue),
-  UI-6 (loop editor + waveform restyle), UI-7 (Edit song: rename + cover from
-  Photos, image_picker approved). Auto Loop (Phase 5) was dropped; Albums /
-  Artists tabs were removed on purpose.
-- UI-8 is WRITTEN, NOT YET RUN by the owner: Apple-Music-style bottom bar in the
-  Library (tabs Songs / Playlists / Favorites / Recents with icons, collapsible
-  on scroll, mini player above or between, search button that opens a bottom
-  search field), and the Shuffle button removed from the Songs tab only. Files:
-  lib/presentation/library/library_bottom_bar.dart (new), library_screen.dart,
-  lib/presentation/shared/mini_player.dart, test/library_bottom_bar_test.dart.
-  Details: STATUS.md "UI-8".
-- NEXT: wait for the owner's UI-8 report (test / analyze / iPhone), fix ONLY what
-  is reported. The owner will then list "a few small changes": do them one
+  Polish 1, Shuffle, UI-1 to UI-7, UI-8 (Apple-Music bottom bar), UI-9 (droplet
+  tab highlight + extra haptics), UI-10 (bigger playlist rows, bar above the
+  keyboard, Artist field in Edit song, search pill without red border). Auto
+  Loop (Phase 5) was dropped; Albums / Artists tabs were removed on purpose.
+- UI-11 (hold-lift-drag droplet, nothing switches until release): the owner ran
+  it, 313 tests passed and 1 failed (a TEST bug: two pumps needed). UI-11 fix
+  is WRITTEN, NOT YET RUN: that test fix + curved shuffle icon
+  (CupertinoIcons.shuffle in shuffle_button, shuffle_play_button, queue_screen).
+  The owner has NOT yet reported the iPhone feel of the droplet drag nor the
+  new shuffle icon. Details: STATUS.md "UI-11" and "UI-11 fix".
+- NEXT: wait for the owner's report on the UI-11 fix (test / analyze / iPhone),
+  fix ONLY what is reported. The owner may then list more small changes: one
   phase per zip. Then the owner reruns PHASE7_CHECKLIST.md.
-- Last reported `flutter test`: all passing after UI-7 (before UI-8). The total
-  was never reported exactly (288+ at UI-4, more since).
+- Last reported `flutter test`: 313 passed + 1 failed (the test bug above). The
+  fix has not been run.
 - Optional ideas not built are at the end of STATUS.md.
 
 ## Lessons from this project (read once)

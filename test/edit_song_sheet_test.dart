@@ -57,6 +57,20 @@ void main() {
     expect(_saveEnabled(tester), isFalse);
   });
 
+  testWidgets('typing an artist enables Save; an empty artist does not',
+      (tester) async {
+    await tester.pumpWidget(_host());
+    expect(find.byKey(const Key('edit_song_artist_field')), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const Key('edit_song_artist_field')), '  Malcolm  Todd ');
+    await tester.pump();
+    expect(_saveEnabled(tester), isTrue);
+
+    await tester.enterText(find.byKey(const Key('edit_song_artist_field')), '  ');
+    await tester.pump();
+    expect(_saveEnabled(tester), isFalse);
+  });
+
   testWidgets('choosing a cover enables Save', (tester) async {
     var calls = 0;
     await tester.pumpWidget(_host(pick: () async {

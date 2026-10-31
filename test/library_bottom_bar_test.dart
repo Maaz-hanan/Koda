@@ -97,6 +97,68 @@ void main() {
     expect(controller.index, 2);
   });
 
+  testWidgets('the droplet slides to the tapped tab and settles', (tester) async {
+    await pump(tester);
+    final droplet = find.byKey(const Key('library_tab_droplet'));
+    final first = tester.getCenter(droplet).dx;
+    await tester.tap(find.byKey(const Key('library_tab_2')));
+    await tester.pumpAndSettle();
+    final tab2 = tester.getCenter(find.byKey(const Key('library_tab_2'))).dx;
+    expect(tester.getCenter(droplet).dx, greaterThan(first));
+    expect((tester.getCenter(droplet).dx - tab2).abs(), lessThan(1));
+  });
+
+  testWidgets('dragging the droplet: nothing switches until the finger lifts',
+      (tester) async {
+    await pump(tester);
+    final droplet = find.byKey(const Key('library_tab_droplet'));
+    final flat = tester.getSize(droplet);
+
+    final g = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('library_tab_0'))));
+    // An animation's first frame only starts its clock: pump twice.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getSize(droplet).height, greaterThan(flat.height)); // lifted
+    await g.moveBy(const Offset(300, 0));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(controller.index, 0); // still on the first tab while held
+
+    await g.up();
+    await tester.pumpAndSettle();
+    expect(controller.index, 2); // switched on release
+    final tab2 = tester.getCenter(find.byKey(const Key('library_tab_2'))).dx;
+    expect((tester.getCenter(droplet).dx - tab2).abs(), lessThan(1));
+    expect(tester.getSize(droplet).height, flat.height); // lowered again
+  });
+
+  testWidgets('a short drag comes back to the same tab and settles on it',
+      (tester) async {
+    await pump(tester);
+    final droplet = find.byKey(const Key('library_tab_droplet'));
+    final g = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('library_tab_0'))));
+    await g.moveBy(const Offset(60, 0));
+    await tester.pump();
+    await g.up();
+    await tester.pumpAndSettle();
+    expect(controller.index, 0);
+    final tab0 = tester.getCenter(find.byKey(const Key('library_tab_0'))).dx;
+    expect((tester.getCenter(droplet).dx - tab0).abs(), lessThan(1));
+  });
+
+  testWidgets('the bar rises above the keyboard', (tester) async {
+    await pump(tester);
+    final before = tester.getBottomLeft(find.byKey(const Key('library_tab_0'))).dy;
+    // viewInsets are in physical pixels: 300 logical points.
+    tester.view.viewInsets =
+        FakeViewPadding(bottom: 300 * tester.view.devicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    final after = tester.getBottomLeft(find.byKey(const Key('library_tab_0'))).dy;
+    expect(after, lessThan(before - 250)); // rose by about 300
+  });
+
   testWidgets('open: the mini player sits above the tabs', (tester) async {
     await pump(tester, item: _song);
     final player = tester.getTopLeft(find.byType(MiniPlayer)).dy;

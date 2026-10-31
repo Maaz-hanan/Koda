@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -138,7 +139,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                           horizontal: AppSpacing.pageMargin),
                       children: [
                         _Pill(
-                          icon: Icons.shuffle,
+                          icon: CupertinoIcons.shuffle,
                           label: 'Shuffle',
                           selected: shuffleOn,
                           onTap: () {

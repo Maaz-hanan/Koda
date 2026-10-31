@@ -869,3 +869,79 @@ Apple Music, collapsible. Keep the "Library" title and the "+" button as they ar
 - Tests: test/library_bottom_bar_test.dart. No new package, no DB change.
 - Unverified on a device: the look of the glass pill, the collapse animation
   feel, and keyboard behaviour in search (bar should sit above the keyboard).
+
+## UI-9 (written, NOT YET RUN by the owner): droplet tab highlight + more haptics
+Owner: UI-8 tested, 309+ tests pass. Request: the selected-tab highlight should
+move like Apple's water droplet; add haptics wherever sensible.
+- library_bottom_bar.dart: the per-tab AnimatedContainer was replaced by ONE
+  highlight (Key 'library_tab_droplet') positioned from TabController.animation
+  (so swipes and taps both drive it). Mid-travel it gets wider (up to +35% per
+  tab travelled) and 8 pt thinner, then settles. Icon/label colours blend
+  between white and accent by distance to the droplet. Keys library_tab_0..3 kept.
+- Haptics: tab tick now fires when the droplet passes the middle of two tabs
+  (listener on controller.animation; _selectTab no longer ticks itself).
+  New ticks: search clear button, song row tap, "more" menu opening, playlist row
+  and "New playlist" row taps, "+" import button, mini player tap (opens Now
+  Playing), scrub/volume bar (tap and drag start). New medium: long-press remove.
+- test/library_bottom_bar_test.dart: +1 droplet test. No package, no DB change.
+- Unverified on a device: droplet feel (stretch 0.35 / squash 8 can be tuned),
+  and that swipe ticks are not too frequent.
+
+## UI-10 (written, NOT YET RUN by the owner): 4 small changes
+1. Playlists tab: bigger rows (72 pt cover, row 88 pt, title 17 pt semibold),
+   divider starts at the text (indent 108). "New playlist" row uses the same size.
+   (playlist_list_view.dart)
+2. Search + keyboard: LibraryBottomBar no longer uses SafeArea; its bottom
+   padding = max(home-indicator inset, keyboard inset) so the whole bar (mini
+   player + search field + close button) rides on top of the keyboard, animated
+   by the phone's own keyboard animation.
+3. Edit song: new "Artist" field (key edit_song_artist_field). Empty box = artist
+   unchanged (Song.copyWith cannot clear it). The title field now has a "next"
+   key, the artist field "done" saves. editSong(artist:) added in
+   library_provider.dart and library_repository.dart. Same cleaning rule as the
+   title (cleanSongTitle). No DB change (the artist column already existed).
+4. Droplet drag: the tab pill accepts a horizontal drag anywhere. The droplet
+   follows the finger (TabController.index / .offset are set while dragging, so
+   the page changes when the droplet passes a tab), a tick on grab, and on
+   release it settles on the nearest tab (a flick carries it further).
+   Ignored while a tap animation is still running.
+- Tests: +drag, +keyboard, +artist. No package, no DB change.
+- Unverified: drag feel, that controller.offset is accepted while dragging
+  (if an assert shows in the console, send it), keyboard glide.
+
+## UI-10 fix (written, NOT YET RUN)
+- Owner ran UI-10: 312 passed, 1 failed ("the bar rises above the keyboard"): my
+  test gave the fake keyboard height in physical pixels (300 px = 100 pt at
+  3x), so the bar rose only 100 pt. The app was right (owner confirmed the bar
+  sits on the keyboard on the iPhone). Test fixed (300 * devicePixelRatio).
+- Owner screenshot: a red rounded outline inside the search pill = the theme's
+  focusedBorder (accent, 1.5) applied to the search TextField. The field now
+  switches off every border / fill (library_bottom_bar.dart).
+
+## UI-11 (written, NOT YET RUN): hold-and-drag droplet, Apple style
+Owner bug: dragging the droplet switched the page half way and, on release, the
+droplet stayed stuck between two tabs. Cause (from reading TabController, not
+run): the drag set controller.index while dragging, then animateTo(sameIndex)
+on release, which does nothing, so the droplet never settled.
+New behaviour (library_bottom_bar.dart; old GestureDetector drag removed):
+- A Listener on the pill. Pressing ON the droplet lifts it (bigger by 14 wide /
+  8 high, a little lighter, tick). Pressing elsewhere is a normal tap.
+- While held it follows the finger on a LOCAL position (_dragPos); the
+  TabController and the pages are NOT touched, nothing switches. A tick when it
+  passes over another tab.
+- On release it glides (320 ms, easeOutCubic, own AnimationController) to the
+  nearest tab, lowers, and only then (same moment) controller.animateTo(target)
+  switches the page if the tab is different. After the glide _dragPos = null and
+  the droplet follows the controller again.
+- Touches are ignored while a page animation or glide is running.
+- Tests: drag test replaced by 2 (nothing switches while held + switches on
+  release + droplet centred; short drag returns and settles). No package/DB.
+- Unverified: feel (sizes 14/8, 160 ms lift, 320 ms glide are easy to tune).
+
+## UI-11 fix (written, NOT YET RUN)
+- Owner ran UI-11: 313 passed, 1 failed (droplet "lifted" check). Test bug: the
+  lift animation's first pump only starts its clock, so the test needs two
+  pumps. App code unchanged.
+- Shuffle icon: Icons.shuffle (straight crossing lines) -> CupertinoIcons.shuffle
+  (curved arrows) in now_playing/shuffle_button.dart, shared/shuffle_play_button.dart
+  and queue/queue_screen.dart. cupertino_icons was already in pubspec.yaml.
