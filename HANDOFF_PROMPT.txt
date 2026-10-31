@@ -9,9 +9,9 @@ Rules so you do not make things up:
 
 Do this, in order:
 1. Unzip the attachment and read HANDOFF.md fully (it is short and is your instruction manual). Follow its rules exactly.
-2. Read from STATUS.md ONLY the "UI-8" section (grep -n "^## " STATUS.md first to find it). Do not read anything else yet.
+2. Read from STATUS.md (grep -n "^## " STATUS.md first to find it). Do not read anything else yet.
 3. Tell me in at most 15 lines what you understand the current state to be, and list which files UI-8 touched. Do NOT write code. Wait for my message.
 
-After that I will paste my UI-8 test / analyze results or my next small changes. Work one phase per reply: one zip with only the changed files plus the updated STATUS.md and HANDOFF.md, then the commands, then the iPhone checks. Ask me before adding any package or changing the database.
+After that I will paste my latest test / analyze results or my next small changes. Work one phase per reply: one zip with only the changed files plus the updated STATUS.md and HANDOFF.md, then the commands, then the iPhone checks. Ask me before adding any package or changing the database.
 
 If I say "checkpoint", stop and give me only the updated STATUS.md and HANDOFF.md in a zip.
