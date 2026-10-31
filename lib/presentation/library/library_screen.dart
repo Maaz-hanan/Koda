@@ -214,7 +214,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 }
 
-/// The large "Library" title with the glass "+" import button.
+/// The large "KŌDA" wordmark title with the glass "+" import button.
 class _LibraryHeader extends StatelessWidget {
   const _LibraryHeader({required this.onImport});
 
@@ -227,7 +227,22 @@ class _LibraryHeader extends StatelessWidget {
           AppSpacing.pageMargin, 8, AppSpacing.pageMargin, 8),
       child: Row(
         children: [
-          const Expanded(child: Text('Library', style: AppText.largeTitle)),
+          Expanded(
+            child: Text(
+              'KŌDA',
+              style: AppText.largeTitle.copyWith(
+                color: AppColors.accent,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                shadows: [
+                  Shadow(
+                    color: AppColors.accent.withValues(alpha: 0.55),
+                    blurRadius: 14,
+                  ),
+                ],
+              ),
+            ),
+          ),
           CircleIconButton(
             icon: Icons.add,
             active: true,

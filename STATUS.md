@@ -945,3 +945,20 @@ New behaviour (library_bottom_bar.dart; old GestureDetector drag removed):
 - Shuffle icon: Icons.shuffle (straight crossing lines) -> CupertinoIcons.shuffle
   (curved arrows) in now_playing/shuffle_button.dart, shared/shuffle_play_button.dart
   and queue/queue_screen.dart. cupertino_icons was already in pubspec.yaml.
+
+## UI-11 test fix 2 + App name/icon (written, NOT YET RUN)
+- test/ui_foundation_test.dart: ShuffleButton test looked for Icons.shuffle but the
+  button now uses CupertinoIcons.shuffle -> test now finds CupertinoIcons.shuffle
+  (added `import 'package:flutter/cupertino.dart' show CupertinoIcons;`).
+  Owner's last run: 313 passed, 1 failed (this one).
+- App name "KŌDA": ios/Runner/Info.plist CFBundleDisplayName + CFBundleName.
+  (Dart title 'LoopPlayer' in lib/main.dart left unchanged on purpose.)
+- App icon: all sizes in ios/Runner/Assets.xcassets/AppIcon.appiconset replaced
+  (made from the owner's artwork; opaque RGB, no alpha; corners filled).
+- Install without flutter run: `flutter run --release -d <iPhone ID>` then q.
+  Signing team in project: SK46UY8997 (owner's own Apple ID; free ID = 7 days).
+
+## KŌDA header (written, NOT YET RUN)
+- lib/presentation/library/library_screen.dart: _LibraryHeader title "Library" ->
+  "KŌDA", AppColors.accent red, w800, letterSpacing 2, soft red glow shadow
+  (like the icon). No test used the old text.

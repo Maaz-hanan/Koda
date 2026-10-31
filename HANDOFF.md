@@ -17,6 +17,7 @@ the owner runs `flutter test` / `flutter analyze` and reports.
   (CupertinoIcons.shuffle in shuffle_button, shuffle_play_button, queue_screen).
   The owner has NOT yet reported the iPhone feel of the droplet drag nor the
   new shuffle icon. Details: STATUS.md "UI-11" and "UI-11 fix".
+- Also written, not run: test fix 2 (CupertinoIcons.shuffle in ui_foundation_test), app name KŌDA, new app icon. Owner installs with `flutter run --release`.
 - NEXT: wait for the owner's report on the UI-11 fix (test / analyze / iPhone),
   fix ONLY what is reported. The owner may then list more small changes: one
   phase per zip. Then the owner reruns PHASE7_CHECKLIST.md.

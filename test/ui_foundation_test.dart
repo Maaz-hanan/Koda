@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:loop_player/presentation/now_playing/shuffle_button.dart';
@@ -126,7 +127,7 @@ void main() {
       await tester.pumpWidget(
           _host(ShuffleButton(isOn: true, onPressed: () => taps++)));
       expect(find.byTooltip('Shuffle: on'), findsOneWidget);
-      expect(tester.widget<Icon>(find.byIcon(Icons.shuffle)).color,
+      expect(tester.widget<Icon>(find.byIcon(CupertinoIcons.shuffle)).color,
           AppColors.accent);
     });
 
