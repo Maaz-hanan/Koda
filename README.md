@@ -129,11 +129,11 @@ Selected interface screens and implementation snapshots.
 
 <p align="center">
   <img src="assets/screenshots/screenshot3.png" width="45%" />
-  <img src="assets/screenshots/screenshot4.png" width="45%" />
+  <img src="assets/screenshots/screenshot4.jpg" width="45%" />
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/screenshot5.png" width="45%" />
+  <img src="assets/screenshots/screenshot5.jpg" width="45%" />
 </p>
 
 ---
