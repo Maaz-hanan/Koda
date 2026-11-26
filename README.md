@@ -123,12 +123,12 @@ Selected interface screens and implementation snapshots.
 ## Application Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/screenshot1.png" width="45%" />
-  <img src="assets/screenshots/screenshot2.png" width="45%" />
+  <img src="assets/screenshots/screenshot1.PNG" width="45%" />
+  <img src="assets/screenshots/screenshot2.PNG" width="45%" />
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/screenshot3.png" width="45%" />
+  <img src="assets/screenshots/screenshot3.PNG" width="45%" />
   <img src="assets/screenshots/screenshot4.jpg" width="45%" />
 </p>
 
